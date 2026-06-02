@@ -1,0 +1,18 @@
+services:
+  h-yt-dlp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: homed/h-yt-dlp:latest
+    container_name: h-yt-dlp
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    environment:
+      TZ: Europe/Lisbon
+    volumes:
+      - ./config:/config                                # playlists.txt, yt-dlp.conf, archive.txt
+      - ./scripts:/scripts:ro                           # útil para `docker exec` em ad-hoc
+      - ../../../../data/media/music:/music             # MESMA árvore que Navidrome lê
+    # Sem network necessária — só faz outbound HTTPS para YouTube

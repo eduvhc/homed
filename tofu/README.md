@@ -1,0 +1,95 @@
+# tofu/
+
+OpenTofu para tudo o que é Cloudflare/R2 do homed.
+
+## Layout
+
+Prefixo `_` agrupa ficheiros de **setup/meta** (providers, encryption, vars, outputs)
+no topo do `ls`. Ficheiros de **recursos cloud** ficam por baixo, um por concern.
+
+```
+tofu/
+├── _providers.tf            # providers + version pinning
+├── _encryption.tf           # state encryption nativo Tofu 1.10+
+├── _variables.tf            # inputs (CF creds, IDs, defaults)
+├── _outputs.tf              # outputs (sensitive: tunnel_token, r2_endpoint)
+├── dns.tf                   # CNAME records *.iedora.com → tunnel
+├── tunnel.tf                # Zero Trust Tunnel + token data source
+├── r2.tf                    # bucket + lifecycle (180d fallback expiry)
+├── .gitignore               # exclui .terraform/ e crash logs
+└── README.md                # este ficheiro
+```
+
+Sem módulos. 3 resources cloud não justificam o overhead — ficaria 9 ficheiros para o que cabe em 3.
+
+## O que está aqui automatizado
+
+- DNS records `*.iedora.com` → tunnel (proxied)
+- Cloudflare Zero Trust Tunnel `homed` (com secret gerado por `random`)
+- R2 bucket `homed-backups` + lifecycle (180d expiry como fallback)
+- State encryption nativo Tofu 1.10+ (AES-GCM com passphrase via PBKDF2)
+
+## O que é manual (uma vez)
+
+Cloudflare R2 S3-compatible credentials para o Restic **não são criáveis** pelo provider atual.
+Cria no dashboard:
+
+1. Cloudflare Dashboard → R2 Object Storage → **Manage R2 API Tokens** → Create token
+2. Permissions: `Object Read & Write`, bucket `homed-backups`
+3. TTL: sem expiração (rotação manual de 6 em 6 meses)
+4. Guarda **Access Key ID** + **Secret Access Key** em `secrets/h-restic.env.sops`:
+   ```bash
+   cat > secrets/h-restic.env <<EOF
+   AWS_ACCESS_KEY_ID=<...>
+   AWS_SECRET_ACCESS_KEY=<...>
+   RESTIC_PASSWORD=<gerar com: openssl rand -hex 32>
+   RESTIC_REPOSITORY=<output tofu r2_endpoint>
+   HC_PING_URL=https://hc-ping.com/<uuid de healthchecks.io>
+   EOF
+   task encrypt NAME=h-restic
+   ```
+
+## Setup inicial (macOS dev)
+
+Zero ficheiros de credenciais. Tudo vem do **macOS Keychain** + **CF API**:
+
+```bash
+# Pré-requisito: ter o token CF no keychain (uma vez)
+security add-generic-password -s CLOUDFLARE_API_TOKEN -a $(whoami) -w '<seu-token>'
+
+# Que permissões o token precisa:
+#   - Account → R2 Storage → Edit
+#   - Zone → DNS → Edit
+#   - Account → Cloudflare Tunnel → Edit
+#   - User → User Details → Read (para descobrir account_id automaticamente)
+
+# Operação
+task tofu-init                # primeira vez (descarrega providers)
+task tofu-plan                # mostra mudanças propostas
+task tofu-apply               # aplica
+task tofu-sync-secrets        # exporta tunnel_token para secrets/h-cloudflared.env.sops
+```
+
+**O que está em cache no keychain:**
+- `CLOUDFLARE_API_TOKEN` — adicionado por ti
+- `HOMED_TOFU_ENCRYPTION` — gerado automaticamente no primeiro `task tofu-*` para encriptar o state
+
+**O que vem da CF API em runtime (não persistido):**
+- `cf_account_id` (descoberto de `/accounts`)
+- `cf_zone_id` (descoberto de `/zones?name=iedora.com`)
+
+## Para Linux (Beelink)
+
+macOS Keychain não existe em Linux. Antes de correr no Beelink, exportar via:
+```bash
+export CLOUDFLARE_API_TOKEN="<token>"
+export HOMED_TOFU_ENCRYPTION="<passphrase gerado no Mac>"
+```
+(ou alternativa: gravar em sops `secrets/tofu.env.sops` e ajustar Taskfile com fallback).
+Por agora, Tofu corre apenas no portátil — apply via internet, sem necessidade de tofu no Beelink.
+
+## Boundary com o resto
+
+- **Cloudflared ingress rules** (que subdomínio → que container interno) vivem em `compose/stacks/infra/h-cloudflared/config.yml`, NÃO aqui.
+- **DNS local AdGuard** (resolução LAN-side) vive em `compose/stacks/network/adguard/config/AdGuardHome.yaml`.
+- **Restic config interna** vive em `compose/stacks/ops/h-restic/`.

@@ -1,0 +1,199 @@
+version: '3'
+
+vars:
+  COMPOSE: docker compose -f compose/compose.yaml
+  SOPS_AGE_KEY_FILE: '{{.HOME}}/.config/sops/age/keys.txt'
+
+env:
+  SOPS_AGE_KEY_FILE: '{{.SOPS_AGE_KEY_FILE}}'
+
+tasks:
+  default:
+    desc: Mostra tasks disponíveis
+    cmds:
+      - task --list
+
+  up:
+    desc: Decifra secrets e arranca o stack
+    deps: [decrypt]
+    cmds:
+      - "{{.COMPOSE}} up -d"
+
+  down:
+    desc: Pára o stack (decrypted .env files ficam no disco)
+    cmds:
+      - "{{.COMPOSE}} down"
+
+  decrypt:
+    desc: Decifra todos os secrets/*.env.sops -> secrets/*.env (mode 600)
+    cmds:
+      - |
+        for f in secrets/*.env.sops; do
+          [ -e "$f" ] || continue
+          out="${f%.sops}"
+          sops -d --input-type dotenv --output-type dotenv "$f" > "$out"
+          chmod 600 "$out"
+        done
+    silent: true
+
+  clean:
+    desc: Remove .env decifrados (deixa apenas os *.env.sops)
+    cmds:
+      - find secrets -maxdepth 1 -type f -name "*.env" -not -name "*.env.sops" -delete
+
+  edit:
+    desc: 'Editar um secret (uso: task edit NAME=h-auth)'
+    requires:
+      vars: [NAME]
+    cmds:
+      - sops --input-type dotenv --output-type dotenv secrets/{{.NAME}}.env.sops
+
+  encrypt:
+    desc: 'Encriptar um novo secret a partir de plaintext (uso: task encrypt NAME=h-foo)'
+    requires:
+      vars: [NAME]
+    cmds:
+      - test -f secrets/{{.NAME}}.env
+      - sops -e --input-type dotenv --output-type dotenv secrets/{{.NAME}}.env > secrets/{{.NAME}}.env.sops
+      - rm secrets/{{.NAME}}.env
+      - echo "✓ secrets/{{.NAME}}.env.sops criado; plaintext removido"
+
+  rotate:
+    desc: Re-encriptar todos os secrets com a lista atual de .sops.yaml
+    cmds:
+      - |
+        for f in secrets/*.env.sops; do
+          sops updatekeys -y "$f"
+        done
+      - echo "✓ rotação concluída"
+
+  ps:
+    desc: Estado dos containers
+    cmds:
+      - "{{.COMPOSE}} ps"
+
+  logs:
+    desc: 'Tail logs de um serviço (uso: task logs NAME=h-auth)'
+    requires:
+      vars: [NAME]
+    cmds:
+      - "{{.COMPOSE}} logs -f --tail=100 {{.NAME}}"
+
+  # ─────────────────────────────  Restic backups  ──────────────────────────────
+  # Operações ad-hoc no container já existente (h-restic-backup). Cron continua
+  # autónomo; estas tasks são para inicialização, validação e operações manuais.
+
+  restic:
+    desc: 'Restic CLI ad-hoc (uso: task restic -- snapshots / -- ls latest)'
+    cmds:
+      - "{{.COMPOSE}} exec h-restic-backup restic {{.CLI_ARGS}}"
+
+  restic-init:
+    desc: 'Inicializa o repositório Restic (uma vez por destino)'
+    cmds:
+      - "{{.COMPOSE}} exec h-restic-backup restic init || echo 'Já inicializado (esperado em re-runs)'"
+
+  restic-snapshot:
+    desc: 'Snapshot manual agora (ignora cron)'
+    cmds:
+      - "{{.COMPOSE}} exec h-restic-backup /usr/local/bin/backup"
+
+  restic-snapshots:
+    desc: 'Listar snapshots existentes'
+    cmds:
+      - "{{.COMPOSE}} exec h-restic-backup restic snapshots --compact"
+
+  restic-check:
+    desc: 'Integridade do repositório (rápido)'
+    cmds:
+      - "{{.COMPOSE}} exec h-restic-backup restic check"
+
+  restic-restore:
+    desc: 'Restore (uso: task restic-restore SNAP=latest TARGET=/tmp/restore)'
+    requires: { vars: [SNAP, TARGET] }
+    cmds:
+      - "{{.COMPOSE}} exec h-restic-backup restic restore {{.SNAP}} --target {{.TARGET}}"
+
+  restic-stats:
+    desc: 'Estatísticas: tamanho, blobs, deduplicação'
+    cmds:
+      - "{{.COMPOSE}} exec h-restic-backup restic stats --mode raw-data"
+
+  # ─────────────────────────────  Tofu (Cloudflare + R2)  ───────────────────────
+  # Pattern para tofu-*: decifrar tfvars.sops para tmp, injetar passphrase de
+  # state encryption, correr tofu, limpar plaintext no fim.
+
+  _tofu:
+    desc: 'Internal — tofu wrapper. Lê CLOUDFLARE_API_TOKEN do macOS Keychain, descobre account_id e zone_id via CF API, gere passphrase de state encryption no Keychain.'
+    requires: { vars: [CMD] }
+    cmds:
+      - |
+        set -eu
+
+        # 1. Token CF — do keychain (único secret externo necessário)
+        TOKEN=$(security find-generic-password -s CLOUDFLARE_API_TOKEN -w 2>/dev/null) \
+          || { echo "✗ CLOUDFLARE_API_TOKEN não está no keychain. Adiciona com:"; \
+               echo "    security add-generic-password -s CLOUDFLARE_API_TOKEN -a $(whoami) -w '<token>'"; exit 1; }
+        export TF_VAR_cf_api_token="$TOKEN"
+
+        # 2. Account ID + Zone ID — descobertos via CF API (cache-friendly)
+        export TF_VAR_cf_account_id=$(curl -sf -H "Authorization: Bearer $TOKEN" \
+          https://api.cloudflare.com/client/v4/accounts \
+          | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"][0]["id"])')
+        export TF_VAR_cf_zone_id=$(curl -sf -H "Authorization: Bearer $TOKEN" \
+          'https://api.cloudflare.com/client/v4/zones?name=iedora.com' \
+          | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"][0]["id"])')
+
+        # 3. Passphrase para state encryption — guarda no keychain (gera 1x)
+        PASS=$(security find-generic-password -s HOMED_TOFU_ENCRYPTION -w 2>/dev/null || echo "")
+        if [ -z "$PASS" ]; then
+          PASS=$(openssl rand -hex 32)
+          security add-generic-password -s HOMED_TOFU_ENCRYPTION -a $(whoami) -w "$PASS"
+          echo "→ Nova passphrase de state encryption guardada em keychain (HOMED_TOFU_ENCRYPTION)"
+        fi
+        export TF_VAR_encryption_passphrase="$PASS"
+
+        cd tofu && tofu {{.CMD}}
+
+  tofu-init:
+    desc: 'Inicializa providers do Tofu'
+    cmds: [{ task: _tofu, vars: { CMD: 'init' } }]
+
+  tofu-plan:
+    desc: 'Tofu plan (state encriptado)'
+    cmds: [{ task: _tofu, vars: { CMD: 'plan' } }]
+
+  tofu-apply:
+    desc: 'Tofu apply (state encriptado). Lê tfvars de sops.'
+    cmds: [{ task: _tofu, vars: { CMD: 'apply -auto-approve' } }]
+
+  tofu-sync-secrets:
+    desc: 'Lê outputs sensíveis do tofu, escreve secrets/h-cloudflared.env.sops'
+    cmds:
+      - task _tofu CMD='output -raw tunnel_token' > secrets/h-cloudflared.env.tmp
+      - awk '/^./ {print "TUNNEL_TOKEN=" $0}' secrets/h-cloudflared.env.tmp > secrets/h-cloudflared.env
+      - rm secrets/h-cloudflared.env.tmp
+      - task encrypt NAME=h-cloudflared
+
+  # ─────────────────────────────  Bootstrap (Ansible)  ──────────────────────────
+  provision:
+    desc: 'Bootstrap declarativo da máquina (Debian 12). Idempotente.'
+    cmds:
+      - ansible-playbook -i ansible/inventory.yml -l {{.HOST | default "localhost"}} ansible/provision.yml --ask-become-pass
+
+  provision-check:
+    desc: 'Dry-run do provision (mostra o que mudaria sem aplicar)'
+    cmds:
+      - ansible-playbook -i ansible/inventory.yml -l {{.HOST | default "localhost"}} ansible/provision.yml --check --diff
+
+  audit-plaintext:
+    desc: Procura ficheiros plaintext que NÃO deviam estar no git
+    cmds:
+      - |
+        bad=$(find secrets -maxdepth 1 -type f -name "*.env" -not -name "*.env.sops" 2>/dev/null)
+        if [ -n "$bad" ]; then
+          echo "⚠️  PLAINTEXT detectado (deve estar em .gitignore):"
+          echo "$bad"
+        else
+          echo "✓ secrets/ limpo de plaintext"
+        fi

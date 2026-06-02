@@ -1,0 +1,39 @@
+# Valkey — Redis fork OSS (BSD, Linux Foundation). Drop-in compatível com Redis 7.2.4.
+# Partilhado por: Authelia (sessions), Meta Menu / ImoPush (cache no futuro).
+# Cada cliente usa uma DB diferente (0=authelia, 1=metamenu, 2=imopush, ...).
+
+services:
+  h-valkey:
+    image: valkey/valkey:9.1-alpine
+    container_name: h-valkey
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    security_opt: [ no-new-privileges:true ]
+    command:
+      - valkey-server
+      - --save
+      - "60 1"
+      - --loglevel
+      - warning
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+    volumes:
+      - h-valkey-data:/data
+    networks:
+      - internal
+    healthcheck:
+      test: [ "CMD", "valkey-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  h-valkey-data:
+
+networks:
+  internal:
+    external: true

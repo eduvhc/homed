@@ -1,0 +1,78 @@
+# h-restic — 3 containers para os 3 jobs do scheduler (mutually exclusive
+# crons por container, pattern da imagem mazzolino/restic).
+#
+# Em OrbStack/dev: RESTIC_REPOSITORY=/repo (volume Docker local h-restic-repo).
+# Em prod (Beelink): swap em secrets/h-restic.env.sops para
+#   RESTIC_REPOSITORY=s3:https://<account>.r2.cloudflarestorage.com/homed-backups
+#   AWS_ACCESS_KEY_ID=<R2 token>
+#   AWS_SECRET_ACCESS_KEY=<R2 token>
+
+x-restic-base: &restic-base
+  image: mazzolino/restic:1.8.2
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "5m", max-file: "3" }
+  security_opt: [ no-new-privileges:true ]
+  env_file:
+    - ../../../../secrets/h-restic.env
+  environment:
+    TZ: Europe/Lisbon
+  volumes:
+    # /source — read-only de tudo o que precisa sobreviver à morte do Beelink
+    - ../../../../secrets:/source/secrets:ro
+    - ../../../../compose/stacks:/source/stacks:ro
+    - ../../../../data/media/music:/source/music:ro
+    - ../../../../data/postgres-dumps:/source/postgres-dumps:ro
+    - h-valkey-data:/source/valkey:ro
+    # repo local (apenas dev/OrbStack — em prod RESTIC_REPOSITORY aponta para R2)
+    - h-restic-repo:/repo
+    - ./excludes:/etc/restic/excludes:ro
+
+services:
+  # ─── backup: snapshot incremental diário ───
+  h-restic-backup:
+    <<: *restic-base
+    container_name: h-restic-backup
+    environment:
+      TZ: Europe/Lisbon
+      BACKUP_CRON: "0 0 2 * * *"           # daily 02:00 (formato 6 campos)
+      RESTIC_BACKUP_SOURCES: "/source"
+      RESTIC_BACKUP_ARGS: "--tag scheduled --exclude-file=/etc/restic/excludes"
+      POST_COMMANDS_SUCCESS: 'curl -fsS -m 10 --retry 3 "$$HC_PING_URL"'
+      POST_COMMANDS_FAILURE: 'curl -fsS -m 10 --retry 3 "$$HC_PING_URL/fail"'
+
+  # ─── check: integridade semanal ───
+  h-restic-check:
+    <<: *restic-base
+    container_name: h-restic-check
+    depends_on: [h-restic-backup]   # backup container faz init exclusivo do repo
+    environment:
+      TZ: Europe/Lisbon
+      SKIP_INIT: "true"             # evita race condition de init no /repo partilhado
+      CHECK_CRON: "0 0 3 * * 0"            # Sunday 03:00
+      RESTIC_CHECK_ARGS: "--read-data-subset=5%"   # 5% sample por semana
+      POST_COMMANDS_FAILURE: 'curl -fsS -m 10 --retry 3 "$$HC_PING_URL/fail"'
+
+  # ─── forget: aplicar retention semanalmente ───
+  h-restic-forget:
+    <<: *restic-base
+    container_name: h-restic-forget
+    depends_on: [h-restic-backup]
+    environment:
+      TZ: Europe/Lisbon
+      SKIP_INIT: "true"
+      PRUNE_CRON: "0 0 4 * * 0"            # Sunday 04:00
+      RESTIC_FORGET_ARGS: >-
+        --tag scheduled
+        --keep-daily 7
+        --keep-weekly 4
+        --keep-monthly 12
+        --keep-yearly 2
+      POST_COMMANDS_FAILURE: 'curl -fsS -m 10 --retry 3 "$$HC_PING_URL/fail"'
+
+volumes:
+  h-restic-repo:        # repo local — em prod fica vazio (R2 é o destino real)
+  h-valkey-data:        # external — definido por h-valkey stack
+    external: true
+    name: compose_h-valkey-data

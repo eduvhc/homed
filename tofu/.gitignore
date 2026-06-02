@@ -1,0 +1,7 @@
+# Provider plugins (descarregados por `tofu init`)
+.terraform/
+.terraform.lock.hcl
+
+# Logs e crashes
+crash.log
+crash.*.log

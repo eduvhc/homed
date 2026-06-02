@@ -1,0 +1,28 @@
+# Decrypted secrets (sops descifra .env.sops -> .env em runtime)
+**/.env
+!**/.env.sops
+
+# Compose local overrides
+compose/compose.override.yaml
+
+# Tofu
+tofu/.terraform/
+tofu/.terraform.lock.hcl
+tofu/*.tfstate
+tofu/*.tfstate.backup
+tofu/crash.log
+
+# Estado das apps (vive em backup Restic, não no git)
+compose/stacks/**/config/
+!compose/stacks/**/config/.gitkeep
+!compose/stacks/infra/postgres/config/init.d/
+!compose/stacks/infra/traefik/config/
+!compose/stacks/infra/authelia/config/
+!compose/stacks/network/adguard/config/
+
+# Media e downloads partilhados (vivem em backup Restic, não no git)
+data/
+
+# Sistema
+.DS_Store
+*.swp

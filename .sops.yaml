@@ -1,0 +1,10 @@
+# Regras de encriptação sops + age.
+# Recipient atual: 1 chave age (rotacionada 2026-06-02; substituiu a leaked do Google Drive).
+# Para rotações futuras, adiciona novo recipient e corre `task rotate`.
+
+creation_rules:
+  - path_regex: secrets/.*\.env$
+    age: age1867kx5pchlg2aty9tqhwvlyyjn6p2rmxlrn9czszusqjdu2acp9qakhet5
+
+  - path_regex: tofu/.*\.(sops|tfvars)$
+    age: age1867kx5pchlg2aty9tqhwvlyyjn6p2rmxlrn9czszusqjdu2acp9qakhet5

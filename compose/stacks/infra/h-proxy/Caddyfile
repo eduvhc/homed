@@ -1,0 +1,23 @@
+# Caddy base config. Site blocks são gerados dinamicamente via labels
+# Docker (caddy-docker-proxy) e fundidos com este ficheiro.
+{
+	# TLS termina na Cloudflare; aqui só HTTP plain dentro do tunnel.
+	auto_https off
+	admin off
+
+	# Confiar nos cabeçalhos forwarded vindos de redes privadas (CF tunnel + LAN)
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+# Snippet importável por qualquer serviço com label `caddy.import authelia`
+(authelia) {
+	forward_auth h-auth:9091 {
+		uri /api/authz/forward-auth
+		copy_headers Remote-User Remote-Groups Remote-Name Remote-Email
+		# Authelia exige HTTPS no X-Forwarded-Proto (cookies seguros).
+		# Em prod, CF Tunnel termina TLS — o user-facing scheme é sempre https.
+		header_up X-Forwarded-Proto https
+	}
+}

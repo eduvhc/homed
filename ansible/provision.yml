@@ -1,0 +1,210 @@
+# Bootstrap declarativo do Beelink (Debian 12) para o estado em que `task up` arranca.
+# Idempotente: cada task verifica o estado antes de agir. Re-correr é seguro.
+
+- name: homed · bootstrap
+  hosts: all
+  become: false
+  vars:
+    arch_map:
+      x86_64: amd64
+      aarch64: arm64
+    debian_arch: "{{ arch_map[ansible_architecture] | default(ansible_architecture) }}"
+
+  pre_tasks:
+    - name: Assert Debian 12+
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Debian'
+          - ansible_distribution_major_version | int >= 12
+        fail_msg: "Este playbook assume Debian 12+ (atual: {{ ansible_distribution }} {{ ansible_distribution_version }})"
+
+  tasks:
+
+    # ───────────────────────────────  apt base  ────────────────────────────────
+    - name: APT · pacotes essenciais
+      become: true
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - ufw
+          - restic
+        update_cache: true
+        cache_valid_time: 3600
+
+    # ──────────────────────────────  docker repo  ──────────────────────────────
+    - name: Docker · keyring
+      become: true
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/debian/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: '0644'
+        force: false
+
+    - name: Docker · apt source
+      become: true
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/docker.sources
+        mode: '0644'
+        content: |
+          Types: deb
+          URIs: https://download.docker.com/linux/debian
+          Suites: {{ ansible_distribution_release }}
+          Components: stable
+          Architectures: {{ debian_arch }}
+          Signed-By: /etc/apt/keyrings/docker.asc
+
+    - name: Docker · instalar engine + plugins
+      become: true
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        update_cache: true
+
+    - name: Docker · utilizador no grupo docker
+      become: true
+      ansible.builtin.user:
+        name: "{{ ansible_user_id }}"
+        groups: docker
+        append: true
+
+    - name: Docker · serviço enabled + running
+      become: true
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+
+    # ───────────────────────────────  sops + age  ──────────────────────────────
+    - name: SOPS · binário
+      become: true
+      ansible.builtin.get_url:
+        url: "https://github.com/getsops/sops/releases/latest/download/sops-v3.12.1.linux.{{ debian_arch }}"
+        dest: /usr/local/bin/sops
+        mode: '0755'
+
+    - name: Age · download tarball
+      ansible.builtin.unarchive:
+        src: "https://github.com/FiloSottile/age/releases/latest/download/age-v1.2.1-linux-{{ debian_arch }}.tar.gz"
+        dest: /tmp
+        remote_src: true
+        creates: /tmp/age/age
+
+    - name: Age · install binaries
+      become: true
+      ansible.builtin.copy:
+        src: "/tmp/age/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        mode: '0755'
+        remote_src: true
+      loop: [age, age-keygen]
+
+    # ──────────────────────────────────  task  ─────────────────────────────────
+    - name: go-task · binário
+      become: true
+      ansible.builtin.shell: |
+        curl -fsSL https://taskfile.dev/install.sh | sh -s -- -d -b /usr/local/bin
+      args:
+        creates: /usr/local/bin/task
+
+    # ────────────────────────────────  tailscale  ──────────────────────────────
+    - name: Tailscale · keyring
+      become: true
+      ansible.builtin.get_url:
+        url: "https://pkgs.tailscale.com/stable/debian/{{ ansible_distribution_release }}.noarmor.gpg"
+        dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
+        mode: '0644'
+
+    - name: Tailscale · apt source
+      become: true
+      ansible.builtin.get_url:
+        url: "https://pkgs.tailscale.com/stable/debian/{{ ansible_distribution_release }}.tailscale-keyring.list"
+        dest: /etc/apt/sources.list.d/tailscale.list
+        mode: '0644'
+
+    - name: Tailscale · instalar
+      become: true
+      ansible.builtin.apt:
+        name: tailscale
+        update_cache: true
+
+    # ─────────────────────────────  Docker networks  ───────────────────────────
+    - name: Docker · networks (edge, internal, dns)
+      community.docker.docker_network:
+        name: "{{ item }}"
+        state: present
+      loop: [edge, internal, dns]
+
+    # ────────────────────────────────────  ufw  ────────────────────────────────
+    - name: UFW · defaults
+      become: true
+      community.general.ufw:
+        direction: "{{ item.direction }}"
+        policy: "{{ item.policy }}"
+      loop:
+        - { direction: incoming, policy: deny }
+        - { direction: outgoing, policy: allow }
+
+    - name: UFW · regras LAN-only
+      become: true
+      community.general.ufw:
+        rule: allow
+        from_ip: "{{ lan_cidr }}"
+        port: "{{ item.port }}"
+        proto: "{{ item.proto | default('tcp') }}"
+        comment: "{{ item.comment }}"
+      loop:
+        - { port: 22,  comment: "SSH LAN" }
+        - { port: 53,  proto: tcp, comment: "DNS LAN (AdGuard)" }
+        - { port: 53,  proto: udp, comment: "DNS LAN (AdGuard)" }
+        - { port: 80,  comment: "HTTP LAN (Caddy)" }
+        - { port: 443, comment: "HTTPS LAN (Caddy)" }
+
+    - name: UFW · enabled
+      become: true
+      community.general.ufw:
+        state: enabled
+
+    # ─────────────────────────────  shell env (sops)  ──────────────────────────
+    - name: Shell · SOPS_AGE_KEY_FILE em ~/.bashrc
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/.bashrc"
+        line: "export SOPS_AGE_KEY_FILE={{ age_key_dir }}/keys.txt"
+        regexp: '^export SOPS_AGE_KEY_FILE='
+        create: true
+        mode: '0644'
+
+    # ─────────────────────────────  age key (estado)  ──────────────────────────
+    - name: Age · dir
+      ansible.builtin.file:
+        path: "{{ age_key_dir }}"
+        state: directory
+        mode: '0700'
+
+    - name: Age · verificar chave presente
+      ansible.builtin.stat:
+        path: "{{ age_key_dir }}/keys.txt"
+      register: age_key
+
+    - name: Age · falha se chave em falta (importação é manual — 1Password/USB)
+      ansible.builtin.fail:
+        msg: |
+          ✗ Chave age em falta: {{ age_key_dir }}/keys.txt
+          Recupera de 1Password ou USB encriptada, depois re-corre.
+            scp <origem>:~/.config/sops/age/keys.txt {{ age_key_dir }}/keys.txt
+            chmod 600 {{ age_key_dir }}/keys.txt
+      when: not age_key.stat.exists
+
+  post_tasks:
+    - name: Resumo final
+      ansible.builtin.debug:
+        msg:
+          - "✓ Provision OK · arch={{ debian_arch }}"
+          - "Próximo: 'sudo tailscale up' (autenticação), depois 'task up'"
+          - "Logout/login para o grupo docker ficar ativo (ou newgrp docker)"

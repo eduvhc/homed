@@ -1,0 +1,23 @@
+# Inventário do homed.
+#
+# - 'localhost' usa connection=local — útil para correr o playbook NA máquina
+#   alvo (Beelink). Não precisa SSH.
+# - 'beelink' usa SSH a partir do portátil — para gestão remota após o primeiro
+#   bootstrap (assume Tailscale ou DNS local).
+#
+# Uso:
+#   ansible-playbook -i ansible/inventory.yml -l localhost ansible/provision.yml
+#   ansible-playbook -i ansible/inventory.yml -l beelink   ansible/provision.yml
+
+all:
+  vars:
+    lan_cidr: 192.168.0.0/16
+    age_key_dir: "{{ ansible_env.HOME }}/.config/sops/age"
+  hosts:
+    localhost:
+      ansible_connection: local
+      ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    beelink:
+      ansible_host: beelink.lan        # ajusta para Tailscale FQDN se preferires
+      ansible_user: eduvhc
+      ansible_python_interpreter: /usr/bin/python3

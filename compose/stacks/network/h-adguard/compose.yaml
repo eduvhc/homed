@@ -1,0 +1,27 @@
+services:
+  h-adguard:
+    image: adguard/adguardhome:v0.107.77
+    container_name: h-adguard
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    security_opt: [ no-new-privileges:true ]
+    ports:
+      # Em prod (Beelink): "53:53/tcp" e "53:53/udp"
+      # Em OrbStack (Mac já usa 53 para mDNS): porta alta para dev
+      - "5353:53/tcp"
+      - "5353:53/udp"
+      - "8082:80/tcp"     # admin UI (wizard skipped — config pré-bootstrapped)
+    volumes:
+      - ./config/work:/opt/adguardhome/work
+      - ./config/conf:/opt/adguardhome/conf
+    networks:
+      - dns
+      - edge
+
+networks:
+  dns:
+    external: true
+  edge:
+    external: true

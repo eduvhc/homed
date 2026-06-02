@@ -1,0 +1,36 @@
+services:
+  h-proxy:
+    image: lucaslorentz/caddy-docker-proxy:2.12.1-alpine
+    container_name: h-proxy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    security_opt: [ no-new-privileges:true ]
+    environment:
+      CADDY_INGRESS_NETWORKS: edge
+      CADDY_DOCKER_CADDYFILE_PATH: /etc/caddy/Caddyfile
+    ports:
+      # Em produção (Beelink): "80:80" / "443:443"
+      # Em OrbStack o porto 80 está ocupado pelo próprio OrbStack
+      - "18080:80"
+      - "18443:443"
+      - "18443:443/udp"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - h-proxy-data:/data
+      - h-proxy-config:/config
+    networks:
+      - edge
+      - internal           # para chegar ao h-auth (forward-auth)
+
+volumes:
+  h-proxy-data:
+  h-proxy-config:
+
+networks:
+  edge:
+    external: true
+  internal:
+    external: true

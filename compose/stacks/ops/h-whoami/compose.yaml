@@ -1,0 +1,20 @@
+# Backend de teste — protegido por Authelia via Caddy snippet.
+# Pede o forward-auth ao h-auth antes de servir.
+services:
+  h-whoami:
+    image: traefik/whoami:v1.11
+    container_name: h-whoami
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "2" }
+    networks:
+      - edge
+    labels:
+      caddy: http://whoami.iedora.com
+      caddy.import: authelia
+      caddy.reverse_proxy: "{{upstreams 80}}"
+
+networks:
+  edge:
+    external: true

@@ -1,0 +1,34 @@
+# homed — top-level compose
+# Apenas agrega stacks via `include:` e define networks partilhadas.
+# Cada serviço vive em stacks/<categoria>/<nome>/compose.yaml.
+
+include:
+  # Descomenta à medida que cada stack for implementado.
+  - stacks/infra/h-proxy/compose.yaml
+  - stacks/infra/h-cloudflared/compose.yaml
+  - stacks/infra/h-valkey/compose.yaml
+  - stacks/infra/h-auth/compose.yaml
+  # - stacks/infra/postgres/compose.yaml
+  - stacks/network/h-adguard/compose.yaml
+  - stacks/ops/h-whoami/compose.yaml      # backend de teste para validar Caddy + Authelia
+  - stacks/media/navidrome/compose.yaml
+  - stacks/arr/h-qbittorrent/compose.yaml
+  - stacks/arr/h-prowlarr/compose.yaml
+  - stacks/arr/h-lidarr/compose.yaml
+  # - stacks/arr/h-sonarr/compose.yaml
+  # - stacks/arr/h-radarr/compose.yaml
+  # - stacks/apps/metamenu/compose.yaml
+  # - stacks/apps/imopush/compose.yaml
+  - stacks/ops/h-glances/compose.yaml
+  - stacks/ops/h-dashboard/compose.yaml
+  - stacks/ops/h-yt-dlp/compose.yaml
+  - stacks/ops/h-restic/compose.yaml
+  # - stacks/ops/uptime-kuma/compose.yaml
+
+networks:
+  edge:
+    name: edge       # h-proxy (caddy) <-> apps expostas
+  internal:
+    name: internal   # apps <-> Postgres
+  dns:
+    name: dns        # adguard isolado

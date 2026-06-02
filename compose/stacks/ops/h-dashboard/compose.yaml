@@ -1,0 +1,27 @@
+services:
+  h-dashboard:
+    image: ghcr.io/gethomepage/homepage:v1.13.1
+    container_name: h-dashboard
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: Europe/Lisbon
+      # Permite renderizar Homepage atrás de Caddy/Authelia (header trust)
+      HOMEPAGE_ALLOWED_HOSTS: "home.iedora.com,localhost:18080"
+    volumes:
+      - ./config:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - edge
+    labels:
+      caddy: http://home.iedora.com
+      caddy.import: authelia
+      caddy.reverse_proxy: "{{upstreams 3000}}"
+
+networks:
+  edge:
+    external: true

@@ -1,0 +1,2 @@
+# 04:00 todos os dias — sincroniza playlists do YouTube com a biblioteca
+0 4 * * * /usr/local/bin/sync.sh >> /var/log/sync.log 2>&1

@@ -1,0 +1,30 @@
+services:
+  h-auth:
+    image: authelia/authelia:4.39.20
+    container_name: h-auth
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    security_opt: [ no-new-privileges:true ]
+    env_file:
+      - ../../../../secrets/h-auth.env     # decifrado por `task up` (sops -> plaintext, 600)
+    environment:
+      TZ: Europe/Lisbon
+    volumes:
+      - ./config:/config
+    ports:
+      - "9091:9091"        # acesso direto para testes OrbStack; em prod, só via Caddy
+    networks:
+      - edge
+      - internal           # para chegar a h-valkey
+    labels:
+      # Em OrbStack usa http:// (TLS termina na CF em prod). Em prod: caddy: auth.iedora.com
+      caddy: http://auth.iedora.com
+      caddy.reverse_proxy: "{{upstreams 9091}}"
+
+networks:
+  edge:
+    external: true
+  internal:
+    external: true
