@@ -8,17 +8,22 @@ services:
       options: { max-size: "10m", max-file: "3" }
     security_opt: [ no-new-privileges:true ]
     ports:
-      # Em prod (Beelink): "53:53/tcp" e "53:53/udp"
-      # Em OrbStack (Mac já usa 53 para mDNS): porta alta para dev
+      # DNS é o único acesso direto (LAN clients fazem queries diretamente).
+      # Em prod (Beelink): "53:53/tcp" e "53:53/udp" — porta well-known.
+      # Em OrbStack (Mac já usa 53 para mDNS): porta alta para dev.
       - "5353:53/tcp"
       - "5353:53/udp"
-      - "8082:80/tcp"     # admin UI (wizard skipped — config pré-bootstrapped)
+      # Admin UI: SEM host port — só via Caddy + Authelia (subdomínio adguard.iedora.com)
     volumes:
       - ./config/work:/opt/adguardhome/work
       - ./config/conf:/opt/adguardhome/conf
     networks:
       - dns
       - edge
+    labels:
+      caddy: http://adguard.iedora.com
+      caddy.import: authelia
+      caddy.reverse_proxy: "{{upstreams 80}}"
 
 networks:
   dns:

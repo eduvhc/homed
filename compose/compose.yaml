@@ -8,7 +8,8 @@ include:
   - stacks/infra/h-cloudflared/compose.yaml
   - stacks/infra/h-valkey/compose.yaml
   - stacks/infra/h-auth/compose.yaml
-  # - stacks/infra/postgres/compose.yaml
+  - stacks/infra/h-postgres/compose.yaml
+  - stacks/infra/h-deploy/compose.yaml
   - stacks/network/h-adguard/compose.yaml
   - stacks/ops/h-whoami/compose.yaml      # backend de teste para validar Caddy + Authelia
   - stacks/media/navidrome/compose.yaml
@@ -23,6 +24,7 @@ include:
   - stacks/ops/h-dashboard/compose.yaml
   - stacks/ops/h-yt-dlp/compose.yaml
   - stacks/ops/h-restic/compose.yaml
+  - stacks/ops/h-gatus/compose.yaml
   # - stacks/ops/uptime-kuma/compose.yaml
 
 networks:

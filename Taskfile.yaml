@@ -48,6 +48,39 @@ tasks:
     cmds:
       - sops --input-type dotenv --output-type dotenv secrets/{{.NAME}}.env.sops
 
+  build-bootstrap-db:
+    desc: Build local h-bootstrap-db image (re-correr sempre que run.sh muda)
+    cmds:
+      - docker build -t h-bootstrap-db:1.0.0 compose/stacks/infra/h-bootstrap-db
+
+  build-deploy:
+    desc: Build local h-deploy image (re-correr sempre que Dockerfile/scripts mudam)
+    cmds:
+      - docker build -t h-deploy:1.0.0 compose/stacks/infra/h-deploy
+
+  deploy-logs:
+    desc: Tail dos logs de deploy (homed + apps)
+    cmds:
+      - tail -f data/deploy/homed.log data/deploy/app.log 2>/dev/null || tail -f data/deploy/*.log
+
+  rollback:
+    desc: 'Rollback de uma app para uma SHA anterior (uso: task rollback APP=lyzer-monorepo SHA=abc1234)'
+    requires:
+      vars: [APP, SHA]
+    cmds:
+      - |
+        echo "→ a actualizar compose para image: lyzer/{{.APP}}:sha-{{.SHA}}"
+        echo "→ edita manualmente o compose.yaml da app e re-corre 'task up' (rollback automático ainda não implementado)"
+        docker images lyzer/{{.APP}} --format '{{`{{.Tag}}\t{{.CreatedAt}}`}}' | grep -E '^sha-' | head -10
+
+  migrate:
+    desc: 'Re-correr migrations de uma app (uso: task migrate APP=imopush)'
+    requires:
+      vars: [APP]
+    deps: [decrypt]
+    cmds:
+      - "{{.COMPOSE}} up --exit-code-from {{.APP}}-db-migrate {{.APP}}-db-bootstrap {{.APP}}-db-migrate"
+
   encrypt:
     desc: 'Encriptar um novo secret a partir de plaintext (uso: task encrypt NAME=h-foo)'
     requires:

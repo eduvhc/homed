@@ -1,0 +1,2052 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>homed · arquitetura</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,700;9..144,900&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink:        #0c0a07;
+    --paper:      #ece5d3;
+    --paper-2:    #ddd2b6;
+    --rule:       #1a1410;
+    --accent:     #c8341d;   /* vermelho carimbo */
+    --accent-2:   #1f4f3a;   /* verde tinta */
+    --accent-3:   #d4a017;   /* ocre */
+    --shadow:     0 1px 0 #0c0a07, 0 2px 0 #0c0a07;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background:
+      radial-gradient(circle at 20% 10%, #efe8d8 0%, transparent 40%),
+      radial-gradient(circle at 80% 90%, #e3d9bf 0%, transparent 50%),
+      var(--paper);
+    color: var(--ink);
+    font-family: "Fraunces", "Iowan Old Style", Georgia, serif;
+    font-feature-settings: "ss01", "ss02", "kern", "liga";
+    min-height: 100vh;
+    line-height: 1.45;
+    overflow-x: hidden;
+  }
+  /* grain */
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0.18;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+  /* fine grid */
+  body::after {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.06;
+    background-image:
+      linear-gradient(to right, var(--ink) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--ink) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  .page {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 56px 48px 120px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── masthead ─────────────────────────────────── */
+  .masthead {
+    border-top: 4px solid var(--ink);
+    border-bottom: 1px solid var(--ink);
+    padding: 14px 0 10px;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: end;
+    gap: 24px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+  .masthead .left { text-align: left; }
+  .masthead .right { text-align: right; }
+  .masthead .center {
+    font-family: "Fraunces", serif;
+    font-weight: 900;
+    font-size: clamp(56px, 9vw, 128px);
+    line-height: 0.9;
+    letter-spacing: -0.04em;
+    text-transform: none;
+    font-style: italic;
+  }
+  .masthead .center sup {
+    font-size: 14px;
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 400;
+    font-style: normal;
+    letter-spacing: 0.1em;
+    vertical-align: super;
+    color: var(--accent);
+  }
+
+  .subtitle {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 32px;
+    align-items: center;
+    margin-top: 18px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--ink);
+  }
+  .subtitle hr {
+    border: 0;
+    border-top: 1px solid var(--ink);
+    margin: 0;
+  }
+  .subtitle .tag {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+  }
+  .deck {
+    margin: 36px 0 8px;
+    font-size: clamp(22px, 2.2vw, 30px);
+    font-weight: 300;
+    font-style: italic;
+    max-width: 880px;
+    line-height: 1.35;
+  }
+  .deck b {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 1px 8px;
+    font-weight: 700;
+    font-style: normal;
+  }
+
+  /* stamp */
+  .stamp {
+    position: absolute;
+    top: 64px;
+    right: 48px;
+    border: 3px solid var(--accent);
+    color: var(--accent);
+    padding: 8px 14px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 700;
+    transform: rotate(-8deg);
+    opacity: 0.88;
+  }
+  .stamp small { display: block; font-size: 9px; letter-spacing: 0.3em; opacity: 0.8; }
+
+  /* ── layers ───────────────────────────────────── */
+  .layer {
+    margin-top: 56px;
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 32px;
+    align-items: start;
+    position: relative;
+  }
+  .layer + .layer { padding-top: 56px; border-top: 1px dashed var(--ink); }
+
+  .layer-meta {
+    position: sticky;
+    top: 24px;
+    align-self: start;
+  }
+  .layer-num {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.25em;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--ink);
+    margin-bottom: 8px;
+  }
+  .layer-name {
+    font-family: "Fraunces", serif;
+    font-weight: 900;
+    font-style: italic;
+    font-size: 40px;
+    line-height: 0.95;
+    letter-spacing: -0.02em;
+  }
+  .layer-blurb {
+    margin-top: 14px;
+    font-size: 14px;
+    color: #2c2419;
+    font-family: "JetBrains Mono", monospace;
+    line-height: 1.5;
+  }
+  .layer-tools {
+    margin-top: 14px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .layer-tools span {
+    display: inline-block;
+    margin: 0 6px 6px 0;
+    padding: 2px 7px;
+    border: 1px solid var(--ink);
+    background: var(--paper-2);
+  }
+
+  /* boxes grid */
+  .boxes {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 14px;
+  }
+  .box {
+    grid-column: span 4;
+    background: var(--paper-2);
+    border: 1.5px solid var(--ink);
+    padding: 14px 16px 16px;
+    position: relative;
+    box-shadow: var(--shadow);
+    transition: transform .25s ease, box-shadow .25s ease;
+  }
+  .box:hover { transform: translate(-2px, -2px); box-shadow: 0 3px 0 var(--ink), 0 5px 0 var(--ink); }
+  .box.wide  { grid-column: span 6; }
+  .box.full  { grid-column: span 12; }
+  .box.tall  { grid-row: span 2; }
+
+  .box .name {
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .box .ver {
+    font-size: 10px;
+    color: var(--accent-2);
+    font-weight: 500;
+  }
+  .box .role {
+    margin-top: 8px;
+    font-family: "Fraunces", serif;
+    font-size: 16px;
+    font-style: italic;
+    line-height: 1.3;
+  }
+  .box .pins {
+    margin-top: 10px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #5a4a2a;
+  }
+  .box .pins b { color: var(--ink); }
+  .box .marker {
+    position: absolute; top: -1.5px; left: -1.5px;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    padding: 2px 6px;
+    text-transform: uppercase;
+  }
+  .box.accent { background: #f3e7c8; }
+  .box.danger { background: #f1d6cd; }
+  .box.green  { background: #d6e2cd; }
+
+  /* arrow band */
+  .flow {
+    margin: 64px 0 24px;
+    border: 1.5px solid var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .flow .step {
+    border: 1px solid var(--paper);
+    padding: 8px 12px;
+  }
+  .flow .arrow { color: var(--accent-3); font-weight: 700; }
+  .flow .em { color: var(--accent-3); }
+
+  /* footer matrix */
+  .matrix {
+    margin-top: 64px;
+    border-top: 4px solid var(--ink);
+    padding-top: 24px;
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 24px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+  }
+  .matrix h4 {
+    font-family: "Fraunces", serif;
+    font-style: italic;
+    font-weight: 700;
+    font-size: 22px;
+    margin: 0 0 10px;
+    letter-spacing: -0.01em;
+  }
+  .matrix ul { padding: 0; margin: 0; list-style: none; }
+  .matrix li { padding: 4px 0; border-bottom: 1px dotted #00000033; }
+  .matrix li b { color: var(--accent); }
+
+  .colophon {
+    margin-top: 56px;
+    display: flex;
+    justify-content: space-between;
+    border-top: 1px solid var(--ink);
+    padding-top: 12px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+  .colophon .dot { color: var(--accent); }
+
+  /* ── diagram ──────────────────────────────────── */
+  .diagram {
+    margin: 56px 0 0;
+    padding: 24px 24px 18px;
+    border: 1.5px solid var(--ink);
+    background: #f1ecdb;
+    box-shadow: var(--shadow);
+    position: relative;
+  }
+  .diagram figcaption {
+    display: flex;
+    align-items: baseline;
+    gap: 18px;
+    flex-wrap: wrap;
+    padding-bottom: 12px;
+    margin-bottom: 14px;
+    border-bottom: 1px solid var(--ink);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .diagram .fig-num {
+    background: var(--ink); color: var(--paper);
+    padding: 3px 8px; letter-spacing: 0.18em;
+  }
+  .diagram .fig-title {
+    font-family: "Fraunces", serif;
+    font-style: italic;
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: -0.01em;
+    text-transform: none;
+    margin-right: auto;
+  }
+  .diagram .fig-legend { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .diagram .lg {
+    display: inline-block; width: 12px; height: 12px;
+    border: 1.2px solid var(--ink); margin-right: 4px; vertical-align: -2px;
+  }
+  .lg-edge    { background: #f3e7c8; }
+  .lg-ingress { background: #f1d6cd; }
+  .lg-app     { background: #ddd2b6; }
+  .lg-ops     { background: #d6e2cd; }
+  .lg-ctrl    { background: #c8b990; }
+
+  .diagram svg { width: 100%; height: auto; display: block; }
+
+  .diagram-key {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--ink);
+    display: flex; gap: 28px; flex-wrap: wrap;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .diagram-key .dash {
+    display: inline-block; width: 28px; height: 0;
+    border-top: 2px solid var(--ink);
+    margin-right: 6px; vertical-align: 3px;
+  }
+  .diagram-key .dash.red   { border-top: 2px dashed var(--accent); }
+  .diagram-key .dash.green { border-top: 2px dotted var(--accent-2); }
+  .diagram-key .dash.dot   { border-top: 2px dotted var(--ink); }
+
+  /* ── story (main diagram) ────────────────────── */
+  .story {
+    margin: 56px 0 0;
+    padding: 28px 28px 24px;
+    border: 1.5px solid var(--ink);
+    background: #f1ecdb;
+    box-shadow: var(--shadow);
+  }
+  .story figcaption {
+    display: flex; align-items: baseline; gap: 16px;
+    padding-bottom: 14px; margin-bottom: 24px;
+    border-bottom: 1px solid var(--ink);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .story .fig-num { background: var(--ink); color: var(--paper); padding: 3px 8px; letter-spacing: 0.18em; }
+  .story .fig-title {
+    font-family: "Fraunces", serif; font-style: italic; font-weight: 700;
+    font-size: 22px; letter-spacing: -0.01em; text-transform: none;
+  }
+  .story .fig-title code {
+    font-family: "JetBrains Mono", monospace;
+    background: var(--ink); color: var(--paper);
+    padding: 2px 8px; font-size: 16px; font-style: normal;
+  }
+
+  .story-grid { display: grid; gap: 14px; }
+
+  .step-row {
+    display: grid;
+    grid-template-columns: 60px 320px 1fr;
+    gap: 20px;
+    align-items: stretch;
+    min-height: 96px;
+  }
+  .step-num {
+    font-family: "Fraunces", serif;
+    font-weight: 900; font-style: italic;
+    font-size: 56px; line-height: 1;
+    color: var(--accent);
+    text-align: right;
+    border-right: 2px solid var(--ink);
+    padding-right: 12px;
+    padding-top: 4px;
+  }
+  .step-card {
+    background: var(--paper-2);
+    border: 1.5px solid var(--ink);
+    padding: 16px 18px 18px;
+    box-shadow: var(--shadow);
+    position: relative;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .step-card.edge    { background: #f3e7c8; }
+  .step-card.ingress { background: #f1d6cd; }
+  .step-card.app     { background: #d6e2cd; }
+  .step-card .step-title {
+    font-family: "Fraunces", serif;
+    font-weight: 700; font-style: italic;
+    font-size: 22px; line-height: 1.15; letter-spacing: -0.01em;
+  }
+  .step-card .step-tech {
+    margin-top: 6px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: #5a4a2a;
+  }
+  .step-card .step-arrow {
+    position: absolute;
+    right: -14px; top: 50%;
+    transform: translateY(-50%);
+    background: var(--ink); color: var(--paper);
+    width: 28px; height: 28px;
+    display: grid; place-items: center;
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 700; font-size: 14px;
+    border-radius: 999px;
+  }
+  .step-row:last-child .step-card .step-arrow {
+    background: var(--accent-2);
+    font-size: 16px;
+  }
+  .step-why {
+    font-family: "Fraunces", serif;
+    font-size: 15.5px;
+    line-height: 1.45;
+    color: #1f1a14;
+    padding: 4px 0 4px 16px;
+    border-left: 2px dashed var(--ink);
+    align-self: center;
+  }
+  .step-why b {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--accent);
+    display: inline-block; margin-right: 6px;
+  }
+  .step-why code {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    background: var(--paper-2);
+    padding: 1px 6px;
+    border: 1px solid var(--ink);
+  }
+
+  /* ── mini diagrams ─────────────────────────────── */
+  .minis { margin-top: 64px; }
+  .minis-intro { border-top: 4px solid var(--ink); padding-top: 18px; margin-bottom: 24px; }
+  .minis-intro h3 {
+    font-family: "Fraunces", serif; font-style: italic; font-weight: 900;
+    font-size: 38px; margin: 0 0 6px; letter-spacing: -0.02em;
+  }
+  .minis-intro p {
+    margin: 0; font-family: "JetBrains Mono", monospace;
+    font-size: 12px; letter-spacing: 0.05em; color: #3a2e1d;
+  }
+  .minis-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+  .mini {
+    border: 1.5px solid var(--ink);
+    background: #efe8d2;
+    padding: 18px 18px 14px;
+    box-shadow: var(--shadow);
+    display: flex; flex-direction: column;
+  }
+  .mini.wide { grid-column: span 3; }
+  .mini header {
+    display: flex; align-items: baseline; gap: 10px;
+    border-bottom: 1px solid var(--ink);
+    padding-bottom: 8px; margin-bottom: 12px;
+  }
+  .mini-tag {
+    font-family: "JetBrains Mono", monospace; font-size: 9.5px;
+    background: var(--ink); color: var(--paper);
+    padding: 2px 7px; letter-spacing: 0.18em; text-transform: uppercase;
+  }
+  .mini h4 {
+    font-family: "Fraunces", serif; font-weight: 900; font-style: italic;
+    font-size: 22px; margin: 0; letter-spacing: -0.01em;
+  }
+  .mini-lead {
+    font-family: "Fraunces", serif;
+    font-size: 14.5px; line-height: 1.45;
+    margin: 0 0 14px;
+  }
+  .mini-lead b { font-weight: 700; }
+  .mini-lead code {
+    font-family: "JetBrains Mono", monospace; font-size: 12px;
+    background: var(--paper-2); padding: 1px 5px; border: 1px solid var(--ink);
+  }
+  .mini-svg { width: 100%; height: auto; display: block; margin-top: auto; }
+  .m-box       { fill: #ddd2b6; stroke: #0c0a07; stroke-width: 1.5; }
+  .m-box.m-edge    { fill: #f3e7c8; }
+  .m-box.m-app     { fill: #f1d6cd; }
+  .m-box.m-ops     { fill: #d6e2cd; }
+  .m-box.m-ctrl    { fill: #c8b990; }
+  .m-name { font: 700 12px "JetBrains Mono", monospace; fill: #0c0a07; }
+  .m-sub  { font: 400 10px "JetBrains Mono", monospace; fill: #2c2419; }
+  .m-edge { font: 400 9.5px "JetBrains Mono", monospace; fill: #2c2419; letter-spacing: 0.05em; paint-order: stroke; stroke: #efe8d2; stroke-width: 4px; stroke-linejoin: round; }
+  .m-link { fill: none; stroke: #0c0a07; stroke-width: 1.6; }
+
+  /* ── decisions ─────────────────────────────────── */
+  .decisions { margin-top: 72px; }
+  .decisions-head {
+    border-top: 4px solid var(--ink);
+    padding-top: 18px;
+    margin-bottom: 28px;
+    max-width: 760px;
+  }
+  .decisions-head h3 {
+    font-family: "Fraunces", serif; font-style: italic; font-weight: 900;
+    font-size: 48px; margin: 0 0 8px; letter-spacing: -0.02em; line-height: 1;
+  }
+  .decisions-head p {
+    margin: 0; font-family: "Fraunces", serif; font-size: 18px; font-style: italic;
+    color: #2c2419; line-height: 1.4;
+  }
+  .decisions-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px;
+  }
+  .dec {
+    border: 1.5px solid var(--ink);
+    background: var(--paper-2);
+    padding: 22px 24px 20px;
+    position: relative;
+    box-shadow: var(--shadow);
+    display: flex; flex-direction: column;
+    transition: transform .2s ease, box-shadow .2s ease;
+  }
+  .dec:hover { transform: translate(-2px, -2px); box-shadow: 0 3px 0 var(--ink), 0 5px 0 var(--ink); }
+  .dec-num {
+    position: absolute; top: -8px; right: 16px;
+    font-family: "Fraunces", serif; font-weight: 900; font-style: italic;
+    font-size: 64px; line-height: 1;
+    color: var(--accent); opacity: 0.45;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .dec > *:not(.dec-num) { position: relative; z-index: 1; }
+  .dec-tag {
+    font-family: "JetBrains Mono", monospace; font-size: 9.5px;
+    background: var(--ink); color: var(--paper);
+    padding: 3px 8px; letter-spacing: 0.18em; text-transform: uppercase;
+    align-self: flex-start;
+    margin-bottom: 10px;
+  }
+  .dec h4 {
+    font-family: "Fraunces", serif; font-weight: 900; font-style: italic;
+    font-size: 26px; line-height: 1.1; letter-spacing: -0.015em;
+    margin: 0 0 14px;
+    padding-right: 50px;
+  }
+  .dec-vs {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 4px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11.5px;
+    margin-bottom: 14px;
+  }
+  .dec-vs > div { padding: 4px 0; border-top: 1px dotted #00000044; }
+  .dec-vs > div:first-child { border-top: 1px solid var(--ink); }
+  .dec-pick b { color: var(--accent-2); margin-right: 6px; }
+  .dec-skip { color: #6b5836; text-decoration: line-through; text-decoration-thickness: 1px; }
+  .dec-skip b { color: var(--accent); text-decoration: none; display: inline-block; margin-right: 6px; }
+  .dec-why {
+    font-family: "Fraunces", serif;
+    font-size: 15px; line-height: 1.5;
+    margin: 0; color: #1f1a14;
+  }
+  .dec-why b { font-weight: 700; }
+  .dec-why code {
+    font-family: "JetBrains Mono", monospace; font-size: 12.5px;
+    background: #f1ecdb; padding: 1px 5px; border: 1px solid var(--ink);
+  }
+
+  /* ── service catalog ───────────────────────────── */
+  .catalog { margin-top: 72px; }
+  .catalog-head {
+    border-top: 4px solid var(--ink);
+    padding-top: 18px;
+    margin-bottom: 32px;
+    max-width: 760px;
+  }
+  .catalog-head h3 {
+    font-family: "Fraunces", serif; font-style: italic; font-weight: 900;
+    font-size: 48px; margin: 0 0 8px; letter-spacing: -0.02em; line-height: 1;
+  }
+  .catalog-head p {
+    margin: 0; font-family: "Fraunces", serif; font-size: 18px; font-style: italic;
+    color: #2c2419; line-height: 1.4;
+  }
+  .cat-group {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 32px;
+    padding-top: 28px;
+    margin-top: 28px;
+    border-top: 1px dashed var(--ink);
+    align-items: start;
+  }
+  .cat-group:first-of-type { border-top: none; margin-top: 0; padding-top: 0; }
+  .cat-label { position: sticky; top: 24px; }
+  .cat-pill {
+    display: inline-block;
+    font-family: "JetBrains Mono", monospace; font-size: 10px;
+    background: var(--ink); color: var(--paper);
+    padding: 3px 9px; letter-spacing: 0.22em; text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .cat-label h5 {
+    font-family: "Fraunces", serif; font-style: italic; font-weight: 900;
+    font-size: 28px; margin: 0 0 8px; letter-spacing: -0.015em; line-height: 1.05;
+  }
+  .cat-label p {
+    margin: 0; font-family: "JetBrains Mono", monospace;
+    font-size: 11px; line-height: 1.5; color: #3a2e1d;
+  }
+  .cat-cards {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+  .svc {
+    border: 1.5px solid var(--ink);
+    background: var(--paper-2);
+    padding: 16px 18px 14px;
+    box-shadow: var(--shadow);
+    display: flex; flex-direction: column;
+  }
+  .svc.full { grid-column: span 2; }
+  .svc-head {
+    display: flex; align-items: baseline; gap: 10px;
+    border-bottom: 1px solid var(--ink);
+    padding-bottom: 6px; margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .svc-name {
+    font-family: "JetBrains Mono", monospace; font-weight: 700;
+    font-size: 14px; letter-spacing: 0.01em;
+  }
+  .svc-name em {
+    font-style: normal; color: var(--accent-2); font-weight: 500;
+    font-size: 12px; margin-left: 2px;
+  }
+  .svc-ver {
+    margin-left: auto;
+    font-family: "JetBrains Mono", monospace; font-size: 10px;
+    color: var(--accent-2); letter-spacing: 0.04em;
+  }
+  .svc-role {
+    font-family: "Fraunces", serif;
+    font-size: 15px; line-height: 1.4;
+    margin: 0 0 12px;
+  }
+  .svc-role code, .svc-meta code {
+    font-family: "JetBrains Mono", monospace; font-size: 11.5px;
+    background: #f1ecdb; padding: 1px 5px; border: 1px solid var(--ink);
+  }
+  .svc-meta {
+    margin: 0;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 12px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10.5px;
+    line-height: 1.35;
+  }
+  .svc-meta dt {
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+  }
+  .svc-meta dd { margin: 0; color: #2c2419; }
+
+  @media (max-width: 900px) {
+    .layer { grid-template-columns: 1fr; }
+    .layer-meta { position: static; }
+    .box, .box.wide, .box.tall { grid-column: span 12; }
+    .matrix { grid-template-columns: 1fr 1fr; }
+    .stamp { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- masthead -->
+  <div class="masthead">
+    <div class="left">vol. 01 · ed. iedora · lisboa</div>
+    <div class="center">homed<sup>01</sup></div>
+    <div class="right">2026-06-02 · self-hosted</div>
+  </div>
+
+  <div class="subtitle">
+    <hr/>
+    <div class="tag">arquitetura · estado atual</div>
+    <hr/>
+  </div>
+
+  <div class="stamp">
+    deployed<br/>
+    <small>orbstack · ok</small>
+  </div>
+
+  <p class="deck">
+    Um homelab <b>declarativo</b> num único Beelink — <i>docker-compose</i> para o que corre em casa,
+    <i>OpenTofu</i> para o que vive na Cloudflare, <i>sops + age</i> para tudo o que é segredo.
+    Reproduzível noutra máquina em menos de uma hora.
+  </p>
+
+  <!-- DIAGRAM -->
+  <!-- ════════════════ MAIN STORY ════════════════ -->
+  <figure class="story">
+    <figcaption>
+      <span class="fig-num">fig. 01</span>
+      <span class="fig-title">O que acontece quando abres <code>auth.iedora.com</code></span>
+    </figcaption>
+
+    <div class="story-grid">
+
+      <!-- step 1 -->
+      <div class="step-row">
+        <div class="step-num">01</div>
+        <div class="step-card edge">
+          <div class="step-title">Browser pede ao DNS público</div>
+          <div class="step-tech">browser · cloudflare DNS</div>
+          <div class="step-arrow">→</div>
+        </div>
+        <div class="step-why">
+          <b>Porquê?</b> O domínio <code>iedora.com</code> está alojado na Cloudflare.
+          O registo <code>auth.iedora.com</code> aponta (CNAME) para um tunnel privado — não para o IP da minha casa.
+          Quem fez isto: <b>OpenTofu</b>, automaticamente.
+        </div>
+      </div>
+
+      <!-- step 2 -->
+      <div class="step-row">
+        <div class="step-num">02</div>
+        <div class="step-card edge">
+          <div class="step-title">Cloudflare entrega ao tunnel</div>
+          <div class="step-tech">zero-trust tunnel · QUIC</div>
+          <div class="step-arrow">↓</div>
+        </div>
+        <div class="step-why">
+          <b>Porquê?</b> Não tenho portas abertas no router de casa.
+          A Cloudflare e o meu Beelink mantêm uma ligação persistente (saída de casa → Cloudflare),
+          e é por aí que o pedido entra. Zero portas expostas, zero IP público.
+        </div>
+      </div>
+
+      <!-- step 3 -->
+      <div class="step-row">
+        <div class="step-num">03</div>
+        <div class="step-card ingress">
+          <div class="step-title">Em casa: cloudflared recebe</div>
+          <div class="step-tech">container h-cloudflared · 2026.5.2</div>
+          <div class="step-arrow">→</div>
+        </div>
+        <div class="step-why">
+          <b>Porquê?</b> Este container é o "outro lado" do tunnel — está sempre ligado à Cloudflare.
+          Quando chega um pedido, ele entrega-o à network interna do Docker (<code>edge</code>).
+        </div>
+      </div>
+
+      <!-- step 4 -->
+      <div class="step-row">
+        <div class="step-num">04</div>
+        <div class="step-card ingress">
+          <div class="step-title">Caddy decide para onde vai</div>
+          <div class="step-tech">container h-proxy · reverse proxy</div>
+          <div class="step-arrow">→</div>
+        </div>
+        <div class="step-why">
+          <b>Porquê?</b> Cada container tem labels Docker tipo <code>caddy: http://auth.iedora.com</code>.
+          O Caddy lê essas labels e sabe para onde mandar o tráfego — sem ficheiros de config a manter.
+          Adicionar um serviço novo = adicionar a label.
+        </div>
+      </div>
+
+      <!-- step 5 -->
+      <div class="step-row">
+        <div class="step-num">05</div>
+        <div class="step-card ingress">
+          <div class="step-title">Authelia: estás autenticado?</div>
+          <div class="step-tech">container h-auth · forward-auth</div>
+          <div class="step-arrow">↓</div>
+        </div>
+        <div class="step-why">
+          <b>Porquê?</b> Antes de entregar à app, o Caddy pergunta primeiro ao Authelia: "este utilizador tem cookie válido?".
+          Se não: redirect para o login. Se sim: entrega à app.
+          As sessões ficam no <b>h-valkey</b> (Redis OSS) — é por isso que ele existe.
+        </div>
+      </div>
+
+      <!-- step 6 -->
+      <div class="step-row">
+        <div class="step-num">06</div>
+        <div class="step-card app">
+          <div class="step-title">Chega à app final</div>
+          <div class="step-tech">navidrome · lidarr · prowlarr · qbittorrent · …</div>
+          <div class="step-arrow">✓</div>
+        </div>
+        <div class="step-why">
+          <b>Porquê isto importa?</b> Nenhuma app vê o utilizador "anónimo" — o Authelia já filtrou.
+          A app só precisa de servir conteúdo. Single sign-on para todas as apps de uma vez.
+        </div>
+      </div>
+
+    </div>
+  </figure>
+
+  <!-- ════════════════ MINI-DIAGRAMS ════════════════ -->
+  <section class="minis">
+    <div class="minis-intro">
+      <h3>E o resto?</h3>
+      <p>O fluxo acima é o caminho principal. Estes três temas correm ao lado, independentes.</p>
+    </div>
+
+    <div class="minis-grid">
+
+      <!-- DNS local -->
+      <article class="mini">
+        <header><span class="mini-tag">tema 01</span><h4>DNS de casa</h4></header>
+        <p class="mini-lead">
+          Em casa, quando ligo ao Wi-Fi, o telefone pergunta primeiro ao <b>h-adguard</b>.
+          É um Pi-hole alternativo: bloqueia ads e resolve <code>*.iedora.com</code> para o IP local
+          (em vez de ir à Cloudflare → fica muito mais rápido).
+        </p>
+        <svg viewBox="0 0 360 220" class="mini-svg">
+          <defs><marker id="ma1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#0c0a07"/></marker></defs>
+          <g>
+            <rect x="20" y="20" width="120" height="56" class="m-box m-app"/>
+            <text x="32" y="44" class="m-name">📱 telefone</text>
+            <text x="32" y="62" class="m-sub">LAN 192.168.50.x</text>
+          </g>
+          <g>
+            <rect x="200" y="20" width="140" height="56" class="m-box m-ops"/>
+            <text x="212" y="44" class="m-name">h-adguard</text>
+            <text x="212" y="62" class="m-sub">DNS sinkhole</text>
+          </g>
+          <path d="M 140 48 H 200" class="m-link" marker-end="url(#ma1)"/>
+
+          <g>
+            <rect x="20"  y="130" width="140" height="60" class="m-box m-app"/>
+            <text x="32" y="154" class="m-name">→ 192.168.50.10</text>
+            <text x="32" y="172" class="m-sub">IP do Beelink</text>
+          </g>
+          <g>
+            <rect x="200" y="130" width="140" height="60" class="m-box m-edge"/>
+            <text x="212" y="154" class="m-name">CF DNS (fallback)</text>
+            <text x="212" y="172" class="m-sub">só para o resto</text>
+          </g>
+          <path d="M 270 76 V 130" class="m-link" marker-end="url(#ma1)"/>
+          <path d="M 200 160 H 160" class="m-link" marker-end="url(#ma1)"/>
+        </svg>
+      </article>
+
+      <!-- Backup -->
+      <article class="mini">
+        <header><span class="mini-tag">tema 02</span><h4>Backup automático</h4></header>
+        <p class="mini-lead">
+          Todas as noites o <b>h-restic-backup</b> tira um snapshot encriptado
+          (configs, secrets, biblioteca de música) e envia para o <b>R2</b> da Cloudflare.
+          Ao Domingo verifica integridade e aplica retention.
+        </p>
+        <svg viewBox="0 0 360 220" class="mini-svg">
+          <defs><marker id="ma2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#c8341d"/></marker></defs>
+          <g>
+            <rect x="20" y="20" width="140" height="56" class="m-box m-ops"/>
+            <text x="32" y="44" class="m-name">/source (ro)</text>
+            <text x="32" y="62" class="m-sub">secrets · configs · music</text>
+          </g>
+          <g>
+            <rect x="20" y="92" width="140" height="56" class="m-box m-ops"/>
+            <text x="32" y="116" class="m-name">h-restic-backup</text>
+            <text x="32" y="134" class="m-sub">cron daily 02:00</text>
+          </g>
+          <g>
+            <rect x="20" y="164" width="140" height="44" class="m-box m-ops"/>
+            <text x="32" y="184" class="m-name">h-restic-check / forget</text>
+            <text x="32" y="200" class="m-sub">sun 03:00 / 04:00</text>
+          </g>
+          <g>
+            <rect x="220" y="80" width="120" height="80" class="m-box m-edge"/>
+            <text x="232" y="106" class="m-name">R2 bucket</text>
+            <text x="232" y="124" class="m-sub">homed-backups</text>
+            <text x="232" y="142" class="m-sub">retention 180 d</text>
+          </g>
+          <path d="M 90 76 V 92" class="m-link" marker-end="url(#ma2)" stroke="#c8341d"/>
+          <path d="M 160 120 H 220" class="m-link" marker-end="url(#ma2)" stroke="#c8341d" stroke-dasharray="5 3"/>
+        </svg>
+      </article>
+
+      <!-- Monitoring -->
+      <article class="mini">
+        <header><span class="mini-tag">tema 03</span><h4>Está tudo vivo?</h4></header>
+        <p class="mini-lead">
+          O <b>h-gatus</b> faz duas coisas: vai bater à porta de cada serviço (probe)
+          e espera receber um "heartbeat" das jobs cron (deadman). Se algo falhar,
+          envia push via <b>ntfy.sh</b> para o telemóvel.
+        </p>
+        <svg viewBox="0 0 360 220" class="mini-svg">
+          <defs><marker id="ma3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#0c0a07"/></marker><marker id="ma3g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f4f3a"/></marker></defs>
+          <g>
+            <rect x="20" y="20" width="120" height="44" class="m-box m-app"/>
+            <text x="32" y="46" class="m-name">apps · 7×</text>
+          </g>
+          <g>
+            <rect x="20" y="84" width="120" height="44" class="m-box m-ops"/>
+            <text x="32" y="110" class="m-name">cron jobs · 4×</text>
+          </g>
+          <g>
+            <rect x="200" y="50" width="140" height="50" class="m-box m-ops"/>
+            <text x="212" y="74" class="m-name">h-gatus</text>
+            <text x="212" y="91" class="m-sub">central</text>
+          </g>
+          <path d="M 140 42 H 200" class="m-link" marker-end="url(#ma3)"/>
+          <text x="146" y="36" class="m-edge">probe</text>
+          <path d="M 140 106 H 200 V 100" class="m-link" stroke="#1f4f3a" stroke-dasharray="2 4" marker-end="url(#ma3g)"/>
+          <text x="146" y="120" class="m-edge" fill="#1f4f3a">heartbeat</text>
+
+          <g>
+            <rect x="200" y="150" width="140" height="50" class="m-box m-edge"/>
+            <text x="212" y="174" class="m-name">ntfy.sh</text>
+            <text x="212" y="191" class="m-sub">📱 push</text>
+          </g>
+          <path d="M 270 100 V 150" class="m-link" marker-end="url(#ma3)"/>
+          <text x="278" y="128" class="m-edge">alerta</text>
+        </svg>
+      </article>
+
+      <!-- Control -->
+      <article class="mini wide">
+        <header><span class="mini-tag">tema 04</span><h4>Como tudo é provisionado (sem clicar em UIs)</h4></header>
+        <p class="mini-lead">
+          Tudo o que vês acima nasce de ficheiros num repo Git. Quatro ferramentas tratam disto.
+          <b>Migrar para outra máquina = clonar o repo + correr <code>task up</code>.</b>
+        </p>
+        <svg viewBox="0 0 720 160" class="mini-svg">
+          <defs><marker id="ma4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#0c0a07"/></marker></defs>
+          <g>
+            <rect x="10" y="20" width="160" height="80" class="m-box m-ctrl"/>
+            <text x="22" y="46" class="m-name">ansible</text>
+            <text x="22" y="64" class="m-sub">provision.yml</text>
+            <text x="22" y="80" class="m-sub">debian → ready</text>
+            <text x="22" y="96" class="m-sub">(uma vez)</text>
+          </g>
+          <g>
+            <rect x="190" y="20" width="160" height="80" class="m-box m-ctrl"/>
+            <text x="202" y="46" class="m-name">tofu</text>
+            <text x="202" y="64" class="m-sub">8 .tf</text>
+            <text x="202" y="80" class="m-sub">cria CF DNS</text>
+            <text x="202" y="96" class="m-sub">+ tunnel + R2</text>
+          </g>
+          <g>
+            <rect x="370" y="20" width="160" height="80" class="m-box m-ctrl"/>
+            <text x="382" y="46" class="m-name">sops + age</text>
+            <text x="382" y="64" class="m-sub">secrets/*.env.sops</text>
+            <text x="382" y="80" class="m-sub">decifra em</text>
+            <text x="382" y="96" class="m-sub">runtime</text>
+          </g>
+          <g>
+            <rect x="550" y="20" width="160" height="80" class="m-box m-ctrl"/>
+            <text x="562" y="46" class="m-name">task up</text>
+            <text x="562" y="64" class="m-sub">Taskfile.yaml</text>
+            <text x="562" y="80" class="m-sub">decrypt +</text>
+            <text x="562" y="96" class="m-sub">docker compose</text>
+          </g>
+          <path d="M 170 60 H 190" class="m-link" marker-end="url(#ma4)"/>
+          <path d="M 350 60 H 370" class="m-link" marker-end="url(#ma4)"/>
+          <path d="M 530 60 H 550" class="m-link" marker-end="url(#ma4)"/>
+          <text x="22" y="130" class="m-edge">Ordem: ansible (1×) → tofu (sempre que muda CF) → sops/task (todos os dias)</text>
+        </svg>
+      </article>
+
+      <!-- Migration pattern -->
+      <article class="mini wide">
+        <header><span class="mini-tag">tema 05</span><h4>Como uma app SaaS arranca (sem ninguém mexer numa UI)</h4></header>
+        <p class="mini-lead">
+          Cada app tem o seu <b>par de sidecars</b>: <code>&lt;app&gt;-db-bootstrap</code> cria o user e a DB no h-postgres,
+          <code>&lt;app&gt;-db-migrate</code> aplica os SQLs (dbmate). Só depois é que a app arranca.
+          Tudo declarativo, idempotente, num único <code>docker compose up -d</code>.
+        </p>
+        <svg viewBox="0 0 760 180" class="mini-svg">
+          <defs>
+            <marker id="ma5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#0c0a07"/></marker>
+          </defs>
+          <!-- h-postgres -->
+          <g>
+            <rect x="10" y="60" width="130" height="64" class="m-box m-edge"/>
+            <text x="22" y="84" class="m-name">h-postgres</text>
+            <text x="22" y="100" class="m-sub">healthy</text>
+            <text x="22" y="116" class="m-sub">postgres:17-alpine</text>
+          </g>
+          <!-- bootstrap -->
+          <g>
+            <rect x="180" y="20" width="170" height="60" class="m-box m-ops"/>
+            <text x="192" y="44" class="m-name">&lt;app&gt;-db-bootstrap</text>
+            <text x="192" y="60" class="m-sub">h-bootstrap-db:1.0.0</text>
+            <text x="192" y="74" class="m-sub">CREATE ROLE + DATABASE</text>
+          </g>
+          <!-- migrate -->
+          <g>
+            <rect x="390" y="20" width="170" height="60" class="m-box m-ops"/>
+            <text x="402" y="44" class="m-name">&lt;app&gt;-db-migrate</text>
+            <text x="402" y="60" class="m-sub">dbmate up</text>
+            <text x="402" y="74" class="m-sub">schema_migrations</text>
+          </g>
+          <!-- app -->
+          <g>
+            <rect x="600" y="20" width="150" height="120" class="m-box m-app"/>
+            <text x="612" y="44" class="m-name">&lt;app&gt;-app</text>
+            <text x="612" y="60" class="m-sub">long-running</text>
+            <text x="612" y="76" class="m-sub">depende do migrate</text>
+            <text x="612" y="92" class="m-sub">terminar OK</text>
+          </g>
+          <!-- exits -->
+          <g>
+            <rect x="180" y="100" width="170" height="40" class="m-box"/>
+            <text x="192" y="120" class="m-sub">exit 0 (idempotente)</text>
+            <text x="192" y="134" class="m-sub">~2 s</text>
+          </g>
+          <g>
+            <rect x="390" y="100" width="170" height="40" class="m-box"/>
+            <text x="402" y="120" class="m-sub">exit 0 (no pending)</text>
+            <text x="402" y="134" class="m-sub">~3 s</text>
+          </g>
+          <!-- arrows -->
+          <path d="M 140 92 H 180" class="m-link" marker-end="url(#ma5)"/>
+          <path d="M 350 50 H 390" class="m-link" marker-end="url(#ma5)"/>
+          <path d="M 560 50 H 600" class="m-link" marker-end="url(#ma5)"/>
+          <text x="200" y="14" class="m-edge">service_healthy</text>
+          <text x="370" y="14" class="m-edge">service_completed_successfully</text>
+          <text x="580" y="14" class="m-edge">service_completed_successfully</text>
+        </svg>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ════════════════ DECISIONS ════════════════ -->
+  <section class="decisions">
+    <header class="decisions-head">
+      <h3>Porquê estas escolhas?</h3>
+      <p>Cada decisão tem alternativas legítimas. Aqui está o que rejeitei e porquê — para futuros eus e juniors que herdarem isto.</p>
+    </header>
+
+    <div class="decisions-grid">
+
+      <article class="dec">
+        <div class="dec-num">01</div>
+        <div class="dec-tag">runtime</div>
+        <h4>docker-compose, não NixOS + k3s</h4>
+        <div class="dec-vs">
+          <div class="dec-pick"><b>✓</b> docker-compose v2 + Debian 12</div>
+          <div class="dec-skip"><b>✗</b> NixOS + k3s + ArgoCD</div>
+        </div>
+        <p class="dec-why">
+          Considerei seriamente NixOS+k3s — mais "puro", mais GitOps.
+          Rejeitei porque <b>amarra-me ao Nix</b>: testar um dashboard novo em Nix é um pincel,
+          e o critério decisivo era <i>"reproduzível noutra máquina sem dor"</i>.
+          Docker-compose corre em qualquer Linux (Synology, RPi5, Fedora) sem reescrever nada.
+          Para single-node a complexidade de k8s não compensa.
+        </p>
+      </article>
+
+      <article class="dec">
+        <div class="dec-num">02</div>
+        <div class="dec-tag">reverse proxy</div>
+        <h4>Caddy, não Traefik nem Nginx</h4>
+        <div class="dec-vs">
+          <div class="dec-pick"><b>✓</b> caddy-docker-proxy (labels)</div>
+          <div class="dec-skip"><b>✗</b> Traefik · Nginx</div>
+        </div>
+        <p class="dec-why">
+          Caddy: config implícita por <b>labels Docker</b>, HTTPS automático,
+          binário mais simples que Traefik. Traefik tem middleware ecosystem maior mas a
+          complexity tax não vale a pena para 10 serviços. Nginx obriga a regenerar
+          <code>nginx.conf</code> a cada serviço novo — atrito desnecessário.
+        </p>
+      </article>
+
+      <article class="dec">
+        <div class="dec-num">03</div>
+        <div class="dec-tag">sso</div>
+        <h4>Authelia, não Authentik nem Pocket ID</h4>
+        <div class="dec-vs">
+          <div class="dec-pick"><b>✓</b> Authelia + forward-auth</div>
+          <div class="dec-skip"><b>✗</b> Authentik · Pocket ID · Keycloak</div>
+        </div>
+        <p class="dec-why">
+          Authelia faz <b>forward-auth</b> — funciona com QUALQUER app por trás de proxy,
+          mesmo apps que nunca ouviram falar de OIDC (a maioria do *arr stack).
+          Pocket ID e Authentik focam-se em OIDC nativo, que a maior parte das self-hosted apps não suporta.
+          Authelia também ganha por config 100% YAML versionado.
+        </p>
+      </article>
+
+      <article class="dec">
+        <div class="dec-num">04</div>
+        <div class="dec-tag">dns sinkhole</div>
+        <h4>AdGuard Home, não Pi-hole</h4>
+        <div class="dec-vs">
+          <div class="dec-pick"><b>✓</b> AdGuard · AdGuardHome.yaml</div>
+          <div class="dec-skip"><b>✗</b> Pi-hole (gravity.db SQLite)</div>
+        </div>
+        <p class="dec-why">
+          AdGuard guarda <b>tudo em YAML versionável no Git</b> — verdadeiramente declarativo.
+          Pi-hole guarda config em SQLite opaca (<code>gravity.db</code>) — perdes a propriedade
+          "git é source-of-truth". Funcionalmente equivalente para o que preciso.
+        </p>
+      </article>
+
+      <article class="dec">
+        <div class="dec-num">05</div>
+        <div class="dec-tag">cache</div>
+        <h4>Valkey, não Redis</h4>
+        <div class="dec-vs">
+          <div class="dec-pick"><b>✓</b> Valkey 9.1 (BSD)</div>
+          <div class="dec-skip"><b>✗</b> Redis (RSALv2/SSPL)</div>
+        </div>
+        <p class="dec-why">
+          Em 2024 a Redis mudou a licença para algo não-OSS.
+          A Linux Foundation criou o <b>fork Valkey</b>, mantido pela comunidade.
+          Drop-in compatível com Redis (Authelia nem se apercebe).
+          Escolher Valkey é a decisão alinhada com o ethos self-hosted/OSS.
+        </p>
+      </article>
+
+      <article class="dec">
+        <div class="dec-num">06</div>
+        <div class="dec-tag">network ingress</div>
+        <h4>Cloudflare Tunnel, não port-forwarding</h4>
+        <div class="dec-vs">
+          <div class="dec-pick"><b>✓</b> Zero-Trust Tunnel (QUIC)</div>
+          <div class="dec-skip"><b>✗</b> port-forward 443 no router · WireGuard</div>
+        </div>
+        <p class="dec-why">
+          Zero portas abertas no router, zero IP público exposto.
+          A ligação é <b>de dentro para fora</b> (saída do Beelink → CF edge).
+          Bónus: DDoS protection grátis, geoblock fácil, IP do meu home invisível.
+          WireGuard exigiria sempre o cliente instalado — quebra "abrir o link do telemóvel da rua".
+        </p>
+      </article>
+
+      <article class="dec">
+        <div class="dec-num">07</div>
+        <div class="dec-tag">iac</div>
+        <h4>OpenTofu 1.10, não Terraform</h4>
+        <div class="dec-vs">
+          <div class="dec-pick"><b>✓</b> OpenTofu (Linux Foundation)</div>
+          <div class="dec-skip"><b>✗</b> Terraform (BSL)</div>
+        </div>
+        <p class="dec-why">
+          Mesmo HCL, mesma toolchain, drop-in replacement.
+          OpenTofu tem ainda <b>state encryption nativa</b> (1.10+) — posso commitar
+          o <code>terraform.tfstate</code> encriptado ao Git sem leak. Terraform não tem isto.
+          E a licença BSL da Hashicorp é hostil para self-hosters.
+        </p>
+      </article>
+
+      <article class="dec">
+        <div class="dec-num">08</div>
+        <div class="dec-tag">secrets</div>
+        <h4>sops + age, não Vault nem Bitwarden</h4>
+        <div class="dec-vs">
+          <div class="dec-pick"><b>✓</b> sops + age (file-based)</div>
+          <div class="dec-skip"><b>✗</b> Hashicorp Vault · Bitwarden Secrets Manager</div>
+        </div>
+        <p class="dec-why">
+          Vault é overkill para single-node — exige cluster, unseal, KMS.
+          sops cifra ficheiros <b>in-place no Git</b> com chave age local.
+          Zero infra extra, zero serviço a manter. A passphrase vive no Keychain.
+          Trade-off honesto: sem audit trail centralizado, mas para 1 utilizador é aceitável.
+        </p>
+      </article>
+
+      <article class="dec">
+        <div class="dec-num">09</div>
+        <div class="dec-tag">secrets org</div>
+        <h4>Secrets centralizados, não per-service</h4>
+        <div class="dec-vs">
+          <div class="dec-pick"><b>✓</b> <code>~/homed/secrets/*.env.sops</code></div>
+          <div class="dec-skip"><b>✗</b> secret dentro de <code>stacks/h-X/.env.sops</code></div>
+        </div>
+        <p class="dec-why">
+          <b>Single Responsibility:</b> secrets não fazem parte da definição de um serviço —
+          são injectados em runtime. Manter num só sítio dá: rotação fácil
+          (um <code>task rotate</code>), auditoria simples (<code>ls secrets/</code>),
+          backup óbvio. Custo: paths feios <code>../../../../secrets/</code> nos compose files.
+          Vale a pena.
+        </p>
+      </article>
+
+      <article class="dec">
+        <div class="dec-num">10</div>
+        <div class="dec-tag">backup engine</div>
+        <h4>Restic, não Borg nem Duplicati</h4>
+        <div class="dec-vs">
+          <div class="dec-pick"><b>✓</b> Restic (S3-compatible)</div>
+          <div class="dec-skip"><b>✗</b> Borg (SSH-only) · Duplicati (Mono UI)</div>
+        </div>
+        <p class="dec-why">
+          Restic faz <b>encryption client-side</b> + dedup + suporte nativo S3.
+          Funciona contra R2 sem proxy. Borg exige um servidor SSH — não corre contra object storage.
+          Duplicati tem UI em .NET/Mono — instável e não-declarativo.
+          Restic é CLI puro: cabe num container, configurável por env vars.
+        </p>
+      </article>
+
+      <article class="dec">
+        <div class="dec-num">11</div>
+        <div class="dec-tag">backup target</div>
+        <h4>Cloudflare R2, não S3 nem B2</h4>
+        <div class="dec-vs">
+          <div class="dec-pick"><b>✓</b> Cloudflare R2</div>
+          <div class="dec-skip"><b>✗</b> AWS S3 · Backblaze B2</div>
+        </div>
+        <p class="dec-why">
+          R2 é S3-compatível mas <b>sem egress fees</b> — restaurar 100 GB não custa €9 como na AWS.
+          Já estou no ecossistema Cloudflare (tunnel, DNS) → mesmo dashboard, mesmo billing.
+          B2 é viável mas paga egress; para um setup só com 1 token de provider,
+          R2 simplifica.
+        </p>
+      </article>
+
+      <article class="dec">
+        <div class="dec-num">12</div>
+        <div class="dec-tag">monitoring</div>
+        <h4>Gatus sozinho, não Uptime Kuma + Healthchecks</h4>
+        <div class="dec-vs">
+          <div class="dec-pick"><b>✓</b> Gatus (probes + push num só)</div>
+          <div class="dec-skip"><b>✗</b> Uptime Kuma + Healthchecks.io</div>
+        </div>
+        <p class="dec-why">
+          Inicialmente tinha os <b>dois</b> — Uptime Kuma para probes activos
+          (bater à porta dos serviços) e Healthchecks para deadman switch (esperar pings).
+          Dois serviços para o mesmo problema. Gatus faz <b>ambos</b> num só container,
+          config 100% YAML versionada. Menos infra, mesma cobertura.
+        </p>
+      </article>
+
+      <article class="dec">
+        <div class="dec-num">13</div>
+        <div class="dec-tag">alerts</div>
+        <h4>ntfy.sh, não Discord nem email</h4>
+        <div class="dec-vs">
+          <div class="dec-pick"><b>✓</b> ntfy.sh (free, app móvel)</div>
+          <div class="dec-skip"><b>✗</b> Discord webhook · SMTP · Pushover</div>
+        </div>
+        <p class="dec-why">
+          ntfy.sh é OSS, tem app móvel grátis (Android/iOS), permite topic privado, zero conta.
+          Discord exige conta e mistura alerts com chat social. SMTP exige um servidor email
+          — outro componente a manter. Pushover é pago.
+        </p>
+      </article>
+
+      <article class="dec">
+        <div class="dec-num">14</div>
+        <div class="dec-tag">provisioning</div>
+        <h4>Ansible, não bash script</h4>
+        <div class="dec-vs">
+          <div class="dec-pick"><b>✓</b> ansible/provision.yml</div>
+          <div class="dec-skip"><b>✗</b> provision.sh</div>
+        </div>
+        <p class="dec-why">
+          O primeiro <code>provision.sh</code> tinha 80 linhas de <code>apt install</code> +
+          <code>curl | sh</code>. Não era idempotente: correr 2× partia coisas.
+          Ansible é <b>declarativo</b> — descreve o estado final, decide o que fazer.
+          Reaplica sem medo, mostra exactly o que mudou, e o playbook documenta o setup.
+          "Scripts em sh hmmm" foi a tua reacção — and you were right.
+        </p>
+      </article>
+
+      <article class="dec">
+        <div class="dec-num">15</div>
+        <div class="dec-tag">task runner</div>
+        <h4>go-task, não Make nem just</h4>
+        <div class="dec-vs">
+          <div class="dec-pick"><b>✓</b> Taskfile.yaml (go-task)</div>
+          <div class="dec-skip"><b>✗</b> Makefile · justfile</div>
+        </div>
+        <p class="dec-why">
+          Make: sintaxe arcana, tabs sagrados, dependências por filesystem.
+          just: melhor, mas DSL própria.
+          go-task: <b>YAML</b>, igual ao resto do projecto (compose, ansible, gatus).
+          Vars, includes e deps em YAML simples — um junior lê e percebe.
+        </p>
+      </article>
+
+      <article class="dec">
+        <div class="dec-num">16</div>
+        <div class="dec-tag">credentials</div>
+        <h4>Uma só credencial fora do repo</h4>
+        <div class="dec-vs">
+          <div class="dec-pick"><b>✓</b> Keychain → CLOUDFLARE_API_TOKEN</div>
+          <div class="dec-skip"><b>✗</b> .env local · vault separado · multiplos tokens</div>
+        </div>
+        <p class="dec-why">
+          Tudo o que é segredo já está cifrado em <code>secrets/*.env.sops</code>.
+          A única coisa <i>que não pode estar lá</i> é a passphrase para decifrar.
+          Solução: vive no Keychain do macOS, único ponto de "trust me".
+          Migrar para nova máquina = importar 1 password + 1 chave age.
+        </p>
+      </article>
+
+      <article class="dec">
+        <div class="dec-num">17</div>
+        <div class="dec-tag">postgres</div>
+        <h4>Postgres partilhado, 1 role por DB</h4>
+        <div class="dec-vs">
+          <div class="dec-pick"><b>✓</b> 1 instância h-postgres + 1 role por DB</div>
+          <div class="dec-skip"><b>✗</b> Postgres per-app · 1 superuser partilhado entre apps</div>
+        </div>
+        <p class="dec-why">
+          1 instância serve todas as apps SaaS (~50 MB idle por instância — pôr 3 não muda nada num Beelink, mas multiplica upgrades, backups e operação).
+          Per-app teria ganhos reais de isolação <i>se</i> houvesse equipa grande; para single-operator é over-engineering.
+          O ponto fraco do partilhado — <b>uma app patológica afecta as outras</b> — mitigamos com <b>1 role por DB</b> em vez de superuser único:
+          se imopush é comprometida, não lê core. <code>statement_timeout</code> por role mitiga query patológica.
+        </p>
+      </article>
+
+      <article class="dec">
+        <div class="dec-num">18</div>
+        <div class="dec-tag">migrations</div>
+        <h4>dbmate + h-bootstrap-db, não Drizzle nem init.d</h4>
+        <div class="dec-vs">
+          <div class="dec-pick"><b>✓</b> sidecars <code>&lt;app&gt;-db-bootstrap</code> + <code>&lt;app&gt;-db-migrate</code> (dbmate)</div>
+          <div class="dec-skip"><b>✗</b> Drizzle como motor canónico · init.d hardcoded · docker exec à mão</div>
+        </div>
+        <p class="dec-why">
+          Drizzle pode continuar como ORM/query-builder de runtime — não é problema do homed.
+          Para <b>migrations versionadas</b> a ferramenta canónica é <code>dbmate</code> (SQL puro, 1 ficheiro por migration, idempotente).
+          Bootstrap (CREATE ROLE+DATABASE) é o passo que o dbmate não faz: pre-requisito num container caseiro mínimo (15 linhas de shell, idempotente).
+          Pattern: <code>bootstrap → migrate → app</code> ligado por <code>service_completed_successfully</code>.
+          Resultado: <code>docker compose up</code> sobe tudo do zero numa máquina nova, sem intervenção humana.
+        </p>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ════════════════ SERVICE CATALOG ════════════════ -->
+  <section class="catalog">
+    <header class="catalog-head">
+      <h3>Papel de cada serviço</h3>
+      <p>17 containers, agrupados pelo que fazem. Cada um existe por uma razão precisa — se removeres um, percebes o que perdes.</p>
+    </header>
+
+    <!-- ─── INFRA ─── -->
+    <div class="cat-group">
+      <div class="cat-label">
+        <span class="cat-pill">infra</span>
+        <h5>Ingress &amp; identidade</h5>
+        <p>Tudo o que decide <i>se</i> e <i>para onde</i> um pedido HTTP vai.</p>
+      </div>
+      <div class="cat-cards">
+
+        <article class="svc">
+          <div class="svc-head">
+            <span class="svc-name">h-cloudflared</span>
+            <span class="svc-ver">2026.5.2</span>
+          </div>
+          <p class="svc-role">Daemon do Cloudflare Tunnel — mantém 4 ligações QUIC à edge da CF (Madrid).</p>
+          <dl class="svc-meta">
+            <dt>Recebe</dt><dd>tráfego de <code>*.iedora.com</code> via tunnel</dd>
+            <dt>Entrega a</dt><dd><code>h-proxy:80</code></dd>
+            <dt>Sem isto</dt><dd>nada de fora chega ao homelab</dd>
+          </dl>
+        </article>
+
+        <article class="svc">
+          <div class="svc-head">
+            <span class="svc-name">h-proxy <em>(caddy)</em></span>
+            <span class="svc-ver">caddy-docker-proxy</span>
+          </div>
+          <p class="svc-role">Reverse proxy que lê labels Docker e roteia para o container certo. Define o snippet <code>(authelia)</code> reutilizado por todos.</p>
+          <dl class="svc-meta">
+            <dt>Recebe de</dt><dd><code>h-cloudflared</code> (e LAN)</dd>
+            <dt>Pergunta a</dt><dd><code>h-auth</code> (forward-auth)</dd>
+            <dt>Entrega a</dt><dd>app correspondente ao Host header</dd>
+          </dl>
+        </article>
+
+        <article class="svc">
+          <div class="svc-head">
+            <span class="svc-name">h-auth <em>(authelia)</em></span>
+            <span class="svc-ver">4.39.20</span>
+          </div>
+          <p class="svc-role">SSO. Valida cookie em cada request via forward-auth. Sem cookie: redirect para login. <i>/rest/*</i> em musica.iedora bypass para a Subsonic API.</p>
+          <dl class="svc-meta">
+            <dt>Sessões em</dt><dd><code>h-valkey</code> db=0</dd>
+            <dt>Users em</dt><dd><code>config/users_database.yml</code></dd>
+            <dt>Sem isto</dt><dd>cada app teria que gerir auth sozinha</dd>
+          </dl>
+        </article>
+
+        <article class="svc">
+          <div class="svc-head">
+            <span class="svc-name">h-valkey</span>
+            <span class="svc-ver">9.1 (OSS)</span>
+          </div>
+          <p class="svc-role">Redis (fork OSS). Hoje serve só o Authelia para guardar sessões. Pronto para outras apps reusarem.</p>
+          <dl class="svc-meta">
+            <dt>Network</dt><dd><code>internal</code> · sem porta no host</dd>
+            <dt>Usado por</dt><dd><code>h-auth</code> (db 0)</dd>
+            <dt>Sem isto</dt><dd>Authelia perde sessões a cada restart</dd>
+          </dl>
+        </article>
+
+      </div>
+    </div>
+
+    <!-- ─── NETWORK ─── -->
+    <div class="cat-group">
+      <div class="cat-label">
+        <span class="cat-pill">network</span>
+        <h5>DNS de casa</h5>
+        <p>Resolve nomes para todos os dispositivos da LAN.</p>
+      </div>
+      <div class="cat-cards">
+        <article class="svc full">
+          <div class="svc-head">
+            <span class="svc-name">h-adguard</span>
+            <span class="svc-ver">0.107.77</span>
+          </div>
+          <p class="svc-role">DNS sinkhole. Bloqueia tracker/ads, e faz rewrite de <code>*.iedora.com</code> para o IP do Beelink (<code>192.168.50.10</code>) — assim os clientes em casa não dão a volta toda à Cloudflare.</p>
+          <dl class="svc-meta">
+            <dt>Portas</dt><dd><code>5353/udp+tcp</code> (DNS)</dd>
+            <dt>Upstreams</dt><dd>Quad9 · Cloudflare DoH</dd>
+            <dt>Admin UI</dt><dd>via Caddy + Authelia (sem porta directa)</dd>
+            <dt>Sem isto</dt><dd>tráfego doméstico cheio de ads, latência *.iedora pior</dd>
+          </dl>
+        </article>
+      </div>
+    </div>
+
+    <!-- ─── DATA ─── -->
+    <div class="cat-group">
+      <div class="cat-label">
+        <span class="cat-pill">data</span>
+        <h5>Postgres partilhado &amp; backup</h5>
+        <p>Instância única de Postgres que serve N apps. 1 role por DB, isolação a nível de credenciais.</p>
+      </div>
+      <div class="cat-cards">
+
+        <article class="svc">
+          <div class="svc-head">
+            <span class="svc-name">h-postgres</span>
+            <span class="svc-ver">17-alpine</span>
+          </div>
+          <p class="svc-role">Postgres partilhado. Auth scram-sha-256, network <code>internal</code> only, sem porta no host. Apps SaaS conectam-se via <code>host=h-postgres port=5432</code>.</p>
+          <dl class="svc-meta">
+            <dt>Healthcheck</dt><dd><code>pg_isready</code> a cada 10s</dd>
+            <dt>Bootstrap por app</dt><dd>via sidecars (h-postgres não conhece apps)</dd>
+            <dt>Sem isto</dt><dd>nenhuma SaaS própria tem persistência</dd>
+          </dl>
+        </article>
+
+        <article class="svc">
+          <div class="svc-head">
+            <span class="svc-name">h-postgres-dump</span>
+            <span class="svc-ver">prodrigestivill:17</span>
+          </div>
+          <p class="svc-role">Sidecar que faz <code>pg_dumpall</code> diário (01:00) para <code>data/postgres-dumps/</code>. O h-restic-backup apanha os dumps no snapshot das 02:00 e empurra-os encriptados para R2.</p>
+          <dl class="svc-meta">
+            <dt>Cron</dt><dd><code>0 1 * * *</code> (1h antes do restic)</dd>
+            <dt>Retention local</dt><dd>7d / 4w / 1m</dd>
+            <dt>Sem isto</dt><dd>perda de DB = perda permanente entre snapshots</dd>
+          </dl>
+        </article>
+
+        <article class="svc full">
+          <div class="svc-head">
+            <span class="svc-name">h-bootstrap-db <em>(imagem, não service)</em></span>
+            <span class="svc-ver">1.0.0 · postgres:17-alpine + run.sh</span>
+          </div>
+          <p class="svc-role">Imagem caseira construída em <code>compose/stacks/infra/h-bootstrap-db/</code>. Cada app instancia-a como <code>&lt;app&gt;-db-bootstrap</code>: lê <code>DB</code> + <code>&lt;APP&gt;_PASSWORD</code>, cria ROLE+DATABASE no h-postgres, sai. Idempotente (guards <code>NOT EXISTS</code>).</p>
+          <dl class="svc-meta">
+            <dt>Build</dt><dd><code>task build-bootstrap-db</code></dd>
+            <dt>Convive com</dt><dd>dbmate (sidecar seguinte que aplica os SQLs como dono da DB)</dd>
+            <dt>Reutilizada por</dt><dd>todas as apps SaaS — uma imagem, N invocações</dd>
+            <dt>Sem isto</dt><dd>cada app criava o seu role/DB à mão (não-reproduzível) ou o init.d hardcodava-as em h-postgres (acoplado)</dd>
+          </dl>
+        </article>
+
+      </div>
+    </div>
+
+    <!-- ─── MEDIA + ARR ─── -->
+    <div class="cat-group">
+      <div class="cat-label">
+        <span class="cat-pill">media · arr</span>
+        <h5>Música automatizada</h5>
+        <p>Pipeline: prowlarr encontra → lidarr decide → qbit transfere → navidrome serve.</p>
+      </div>
+      <div class="cat-cards">
+
+        <article class="svc">
+          <div class="svc-head"><span class="svc-name">h-prowlarr</span></div>
+          <p class="svc-role">Aggregator de indexers. Centraliza configuração de trackers para as Arr não terem que repetir.</p>
+          <dl class="svc-meta">
+            <dt>Serve</dt><dd><code>h-lidarr</code> (e sonarr/radarr futuras)</dd>
+            <dt>Sem isto</dt><dd>cada Arr precisaria das suas próprias chaves de indexer</dd>
+          </dl>
+        </article>
+
+        <article class="svc">
+          <div class="svc-head"><span class="svc-name">h-lidarr</span></div>
+          <p class="svc-role">Brain musical. Sabe o que queres, vigia releases, manda o qBit transferir, organiza ficheiros, escreve metadata.</p>
+          <dl class="svc-meta">
+            <dt>Lê</dt><dd>prowlarr (indexers)</dd>
+            <dt>Manda para</dt><dd>qBittorrent</dd>
+            <dt>Output</dt><dd><code>data/media/music/</code> → navidrome</dd>
+          </dl>
+        </article>
+
+        <article class="svc">
+          <div class="svc-head"><span class="svc-name">h-qbittorrent</span></div>
+          <p class="svc-role">Cliente torrent. Apenas executa — recebe ordens das Arr e descarrega.</p>
+          <dl class="svc-meta">
+            <dt>Controlado por</dt><dd>lidarr</dd>
+            <dt>Sem isto</dt><dd>as Arr ficam paradas — encontram releases mas não as podem buscar</dd>
+          </dl>
+        </article>
+
+        <article class="svc">
+          <div class="svc-head"><span class="svc-name">h-navidrome</span></div>
+          <p class="svc-role">Stream da biblioteca. Subsonic API → telemóvel, browser, qualquer cliente.</p>
+          <dl class="svc-meta">
+            <dt>Lê</dt><dd><code>data/media/music/</code></dd>
+            <dt>Bypass Authelia</dt><dd><code>/rest/*</code> (API Subsonic não envia cookies)</dd>
+            <dt>Sem isto</dt><dd>tens música mas não a podes ouvir do telemóvel</dd>
+          </dl>
+        </article>
+
+        <article class="svc">
+          <div class="svc-head"><span class="svc-name">h-yt-dlp</span></div>
+          <p class="svc-role">Plano B do pipeline Arr. Sync diário (04:00) de playlists para a biblioteca de música.</p>
+          <dl class="svc-meta">
+            <dt>Output</dt><dd><code>data/media/music/</code></dd>
+            <dt>Pinga</dt><dd>gatus (deadman heartbeat)</dd>
+          </dl>
+        </article>
+
+      </div>
+    </div>
+
+    <!-- ─── OPS ─── -->
+    <div class="cat-group">
+      <div class="cat-label">
+        <span class="cat-pill">ops</span>
+        <h5>Manter o sistema vivo</h5>
+        <p>Backup, integridade, retention, monitoring. Tudo o que recupera ou alerta.</p>
+      </div>
+      <div class="cat-cards">
+
+        <article class="svc">
+          <div class="svc-head"><span class="svc-name">h-restic-backup</span><span class="svc-ver">mazzolino 1.8.2</span></div>
+          <p class="svc-role">Snapshot incremental diário (02:00). Encripta client-side e empurra para o R2.</p>
+          <dl class="svc-meta">
+            <dt>Lê (ro)</dt><dd>secrets · stacks · music · postgres-dumps · valkey-data</dd>
+            <dt>Escreve em</dt><dd>R2 <code>homed-backups</code></dd>
+          </dl>
+        </article>
+
+        <article class="svc">
+          <div class="svc-head"><span class="svc-name">h-restic-check</span><span class="svc-ver">mazzolino 1.8.2</span></div>
+          <p class="svc-role">Integridade semanal (Dom 03:00). Faz <code>--read-data-subset=5%</code> — sample real, não só metadata.</p>
+          <dl class="svc-meta">
+            <dt>SKIP_INIT</dt><dd>true (backup já fez init do repo)</dd>
+            <dt>Sem isto</dt><dd>backups silenciosamente corrompidos só descobertos no dia da emergência</dd>
+          </dl>
+        </article>
+
+        <article class="svc">
+          <div class="svc-head"><span class="svc-name">h-restic-forget</span><span class="svc-ver">mazzolino 1.8.2</span></div>
+          <p class="svc-role">Retention semanal (Dom 04:00). Aplica <code>7d / 4w / 12m / 2y</code> e roda o prune.</p>
+          <dl class="svc-meta">
+            <dt>Sem isto</dt><dd>R2 cresce indefinidamente, factura escala</dd>
+          </dl>
+        </article>
+
+        <article class="svc">
+          <div class="svc-head"><span class="svc-name">h-gatus</span><span class="svc-ver">v5.36.0</span></div>
+          <p class="svc-role">Monitoring central. 7 probes activos (HTTP/DNS/TCP) + 4 deadman switches (espera pings dos crons).</p>
+          <dl class="svc-meta">
+            <dt>Dashboard</dt><dd><code>gatus.iedora.com</code> (atrás de Authelia)</dd>
+            <dt>Alerta via</dt><dd>ntfy.sh</dd>
+            <dt>Sem isto</dt><dd>nada te avisa quando algo cai (e cron silencioso é o pior)</dd>
+          </dl>
+        </article>
+
+        <article class="svc">
+          <div class="svc-head"><span class="svc-name">h-glances</span></div>
+          <p class="svc-role">Métricas de host (CPU, RAM, disk, network) num único endpoint.</p>
+          <dl class="svc-meta">
+            <dt>Para</dt><dd>debugging rápido sem SSH</dd>
+          </dl>
+        </article>
+
+        <article class="svc">
+          <div class="svc-head"><span class="svc-name">h-dashboard</span></div>
+          <p class="svc-role">Página inicial — atalhos para todas as apps em <code>home.iedora.com</code>.</p>
+          <dl class="svc-meta">
+            <dt>Cosmético</dt><dd>mas usado todos os dias</dd>
+          </dl>
+        </article>
+
+        <article class="svc">
+          <div class="svc-head"><span class="svc-name">h-whoami</span></div>
+          <p class="svc-role">Backend mínimo para validar que o pipeline (CF → tunnel → caddy → authelia) está vivo end-to-end.</p>
+          <dl class="svc-meta">
+            <dt>Usado por</dt><dd>gatus (probe <code>h-proxy</code>)</dd>
+            <dt>Sem isto</dt><dd>terias que usar uma app real para testes — efeito secundário em cada deploy</dd>
+          </dl>
+        </article>
+
+      </div>
+    </div>
+
+  </section>
+
+  <!-- LAYER 0 — EDGE -->
+  <section class="layer">
+    <div class="layer-meta">
+      <div class="layer-num">camada 00</div>
+      <div class="layer-name">Edge<br/><i>público</i></div>
+      <div class="layer-blurb">Internet → Cloudflare. Tudo o que entra de fora passa por aqui. Sem portas abertas no router.</div>
+      <div class="layer-tools">
+        <span>cloudflare</span><span>r2</span><span>opentofu 1.10</span>
+      </div>
+    </div>
+    <div class="boxes">
+      <div class="box wide accent">
+        <div class="marker">tofu</div>
+        <div class="name">cloudflare zone <span class="ver">iedora.com</span></div>
+        <div class="role">Zona DNS gerida por Tofu — 9 subdomínios CNAME para o tunnel.</div>
+        <div class="pins">auth · adguard · gatus · home · musica · lidarr · prowlarr · qb · whoami</div>
+      </div>
+      <div class="box wide accent">
+        <div class="marker">tofu</div>
+        <div class="name">zero-trust tunnel <span class="ver">ac61d7be…</span></div>
+        <div class="role">Tunnel "homed" — credentials geradas por Tofu, consumidas pelo h-cloudflared.</div>
+        <div class="pins">ingress: <b>*.iedora.com → h-proxy:80</b></div>
+      </div>
+      <div class="box wide green">
+        <div class="marker">tofu</div>
+        <div class="name">r2 bucket <span class="ver">homed-backups</span></div>
+        <div class="role">Bucket S3-compatível para o Restic. Lifecycle 180 dias.</div>
+        <div class="pins">restic repo · encriptado client-side</div>
+      </div>
+      <div class="box wide">
+        <div class="marker">macOS</div>
+        <div class="name">keychain <span class="ver">login</span></div>
+        <div class="role">Única credencial fora do repo: <i>CLOUDFLARE_API_TOKEN</i> + passphrase do state encryption.</div>
+        <div class="pins">security find-generic-password</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LAYER 1 — INGRESS -->
+  <section class="layer">
+    <div class="layer-meta">
+      <div class="layer-num">camada 01</div>
+      <div class="layer-name">Ingress<br/><i>tunnel · proxy</i></div>
+      <div class="layer-blurb">Cloudflared traz o tráfego para dentro. Caddy decide para onde vai. Authelia decide se pode entrar.</div>
+      <div class="layer-tools">
+        <span>cloudflared 2026.5.2</span><span>caddy-docker-proxy</span><span>authelia 4.39</span>
+      </div>
+    </div>
+    <div class="boxes">
+      <div class="box">
+        <div class="marker">infra</div>
+        <div class="name">h-cloudflared <span class="ver">2026.5.2</span></div>
+        <div class="role">Daemon do tunnel — 4 conexões QUIC para edge de Madrid.</div>
+        <div class="pins">config_src: local · ingress: *.iedora.com</div>
+      </div>
+      <div class="box">
+        <div class="marker">infra</div>
+        <div class="name">h-proxy · caddy <span class="ver">cdp</span></div>
+        <div class="role">Reverse proxy por labels Docker. Forward-auth snippet (authelia) reutilizado.</div>
+        <div class="pins">net: edge · auto_https off · X-Forwarded-Proto https</div>
+      </div>
+      <div class="box accent">
+        <div class="marker">sso</div>
+        <div class="name">h-auth · authelia <span class="ver">4.39.20</span></div>
+        <div class="role">SSO 1-fator (sem 2FA por agora). Bypass <i>/rest/*</i> para a Subsonic API.</div>
+        <div class="pins">sessões em h-valkey db=0 · user: edu</div>
+      </div>
+      <div class="box">
+        <div class="marker">cache</div>
+        <div class="name">h-valkey <span class="ver">9.1</span></div>
+        <div class="role">Redis OSS fork, partilhado. Hoje só Authelia; pronto para o resto.</div>
+        <div class="pins">net: internal · sem porta no host</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FLOW -->
+  <div class="flow">
+    <span class="em">▸</span>
+    <div class="step">browser</div>
+    <span class="arrow">→</span>
+    <div class="step">cloudflare edge</div>
+    <span class="arrow">→</span>
+    <div class="step">tunnel (QUIC)</div>
+    <span class="arrow">→</span>
+    <div class="step">h-cloudflared</div>
+    <span class="arrow">→</span>
+    <div class="step">h-proxy / caddy</div>
+    <span class="arrow">→</span>
+    <div class="step">h-auth (forward-auth)</div>
+    <span class="arrow">→</span>
+    <div class="step em">app</div>
+  </div>
+
+  <!-- LAYER 2 — NETWORK -->
+  <section class="layer">
+    <div class="layer-meta">
+      <div class="layer-num">camada 02</div>
+      <div class="layer-name">Network<br/><i>dns · LAN</i></div>
+      <div class="layer-blurb">DNS sinkhole para a casa toda. Rewrite *.iedora.com para o IP interno do Beelink.</div>
+      <div class="layer-tools">
+        <span>adguard 0.107.77</span>
+      </div>
+    </div>
+    <div class="boxes">
+      <div class="box wide green">
+        <div class="marker">dns</div>
+        <div class="name">h-adguard <span class="ver">0.107.77</span></div>
+        <div class="role">Sinkhole + DNS local. Config 100% em YAML versionado — sem UI a guardar estado.</div>
+        <div class="pins">5353 tcp+udp · upstreams Quad9 + Cloudflare DoH · rewrite *.iedora.com → 192.168.50.10</div>
+      </div>
+      <div class="box wide">
+        <div class="marker">policy</div>
+        <div class="name">três networks</div>
+        <div class="role">Segmentação por função. Apps só acedem ao que precisam.</div>
+        <div class="pins"><b>edge</b> · <b>internal</b> · <b>dns</b></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LAYER 3 — APPS -->
+  <section class="layer">
+    <div class="layer-meta">
+      <div class="layer-num">camada 03</div>
+      <div class="layer-name">Apps<br/><i>media · *arr</i></div>
+      <div class="layer-blurb">Tudo atrás de Authelia, sem portas no host. Cada stack vive em <i>stacks/&lt;categoria&gt;/&lt;nome&gt;/</i>.</div>
+      <div class="layer-tools">
+        <span>navidrome</span><span>qbittorrent</span><span>prowlarr</span><span>lidarr</span><span>yt-dlp</span>
+      </div>
+    </div>
+    <div class="boxes">
+      <div class="box">
+        <div class="marker">media</div>
+        <div class="name">h-navidrome</div>
+        <div class="role">Stream da biblioteca de música.</div>
+        <div class="pins">musica.iedora.com · /rest/* bypass</div>
+      </div>
+      <div class="box">
+        <div class="marker">arr</div>
+        <div class="name">h-prowlarr</div>
+        <div class="role">Aggregator de indexers para as Arr.</div>
+        <div class="pins">prowlarr.iedora.com</div>
+      </div>
+      <div class="box">
+        <div class="marker">arr</div>
+        <div class="name">h-lidarr</div>
+        <div class="role">Biblioteca musical — automação de releases.</div>
+        <div class="pins">lidarr.iedora.com</div>
+      </div>
+      <div class="box">
+        <div class="marker">arr</div>
+        <div class="name">h-qbittorrent</div>
+        <div class="role">Cliente torrent — fonte de downloads para as Arr.</div>
+        <div class="pins">qb.iedora.com</div>
+      </div>
+      <div class="box">
+        <div class="marker">ops</div>
+        <div class="name">h-yt-dlp</div>
+        <div class="role">Sync diário de playlists para a biblioteca de música.</div>
+        <div class="pins">cron daily 04:00 → push → h-gatus</div>
+      </div>
+      <div class="box">
+        <div class="marker">ops</div>
+        <div class="name">h-whoami · h-glances · h-dashboard</div>
+        <div class="role">Backends de teste + observabilidade leve + entrada visual.</div>
+        <div class="pins">home.iedora.com · whoami.iedora.com</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LAYER 4 — OPS -->
+  <section class="layer">
+    <div class="layer-meta">
+      <div class="layer-num">camada 04</div>
+      <div class="layer-name">Ops<br/><i>backup · monitoring</i></div>
+      <div class="layer-blurb">Tudo o que mantém o sistema vivo: snapshots para R2, integridade semanal, alertas push.</div>
+      <div class="layer-tools">
+        <span>restic 0.17</span><span>mazzolino 1.8.2</span><span>gatus 5.36</span><span>ntfy.sh</span>
+      </div>
+    </div>
+    <div class="boxes">
+      <div class="box green">
+        <div class="marker">backup</div>
+        <div class="name">h-restic-backup</div>
+        <div class="role">Snapshot diário incremental → R2.</div>
+        <div class="pins">cron 02:00 · 5.4 MiB · dedup 2.55×</div>
+      </div>
+      <div class="box green">
+        <div class="marker">backup</div>
+        <div class="name">h-restic-check</div>
+        <div class="role">Integridade semanal — sample 5% read-data.</div>
+        <div class="pins">sun 03:00 · SKIP_INIT</div>
+      </div>
+      <div class="box green">
+        <div class="marker">backup</div>
+        <div class="name">h-restic-forget</div>
+        <div class="role">Aplica retention 7d/4w/12m/2y.</div>
+        <div class="pins">sun 04:00 · SKIP_INIT</div>
+      </div>
+      <div class="box wide accent">
+        <div class="marker">monitor</div>
+        <div class="name">h-gatus <span class="ver">v5.36.0</span></div>
+        <div class="role">Monitoring declarativo — 7 probes ativos + 4 push (deadman). Alertas via ntfy.sh.</div>
+        <div class="pins">tunnel · h-auth · h-proxy · h-adguard×2 · h-navidrome · h-valkey · push: restic ×3 + yt-dlp</div>
+      </div>
+      <div class="box wide">
+        <div class="marker">alerts</div>
+        <div class="name">ntfy.sh</div>
+        <div class="role">Push para o telemóvel. Free tier, topic privado.</div>
+        <div class="pins">failure-threshold 2 · send-on-resolved true</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LAYER 5 — PROVISIONING -->
+  <section class="layer">
+    <div class="layer-meta">
+      <div class="layer-num">camada 05</div>
+      <div class="layer-name">Control<br/><i>provisionamento</i></div>
+      <div class="layer-blurb">Como tudo isto chega à máquina. Zero scripts shell — Ansible + Taskfile + sops.</div>
+      <div class="layer-tools">
+        <span>ansible</span><span>go-task</span><span>sops + age</span>
+      </div>
+    </div>
+    <div class="boxes">
+      <div class="box">
+        <div class="marker">bootstrap</div>
+        <div class="name">ansible/provision.yml</div>
+        <div class="role">210 linhas idempotentes: docker, sops, age, task, tailscale, ufw, networks.</div>
+        <div class="pins">Debian 12 → ready</div>
+      </div>
+      <div class="box">
+        <div class="marker">tasks</div>
+        <div class="name">Taskfile.yaml</div>
+        <div class="role">Interface única: up · down · decrypt · encrypt · tofu-* · restic-* · provision.</div>
+        <div class="pins">task up = decrypt + compose up -d</div>
+      </div>
+      <div class="box danger">
+        <div class="marker">crypto</div>
+        <div class="name">sops + age</div>
+        <div class="role">Secrets centralizados em <i>~/homed/secrets/*.env.sops</i>. SRP estrito.</div>
+        <div class="pins">recipient: age1867kx5… · key em ~/.config/sops/age</div>
+      </div>
+      <div class="box">
+        <div class="marker">iac</div>
+        <div class="name">tofu/</div>
+        <div class="role">8 ficheiros. State encriptado in-place (PBKDF2 + AES-GCM).</div>
+        <div class="pins">dns · tunnel · r2 · providers · encryption</div>
+      </div>
+      <div class="box wide">
+        <div class="marker">repo</div>
+        <div class="name">~/homed · ~/dotfiles</div>
+        <div class="role">Cada serviço novo é validado contra <i>dotfiles/modules/home/references.nix</i> e adicionado à sync se faltar.</div>
+        <div class="pins">regra: refs sync sempre</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MATRIX -->
+  <section class="matrix">
+    <div>
+      <h4>Princípios</h4>
+      <ul>
+        <li><b>01</b> · reproduzível noutra máquina em &lt; 1h</li>
+        <li><b>02</b> · git é o source-of-truth — UI state proibido</li>
+        <li><b>03</b> · uma só credencial fora do repo (keychain)</li>
+        <li><b>04</b> · SRP — secrets centralizados, nunca por-serviço</li>
+        <li><b>05</b> · pin de versões — zero <i>:latest</i></li>
+        <li><b>06</b> · nada exposto no host — tudo via Caddy + Authelia</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Edge</h4>
+      <ul>
+        <li>Cloudflare DNS</li>
+        <li>Zero-Trust Tunnel</li>
+        <li>R2 (backups)</li>
+        <li>OpenTofu 1.10</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Host</h4>
+      <ul>
+        <li>Debian 12</li>
+        <li>Docker + compose v2</li>
+        <li>Tailscale</li>
+        <li>OrbStack (dev)</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Stacks</h4>
+      <ul>
+        <li>infra (4)</li>
+        <li>network (1)</li>
+        <li>media (1)</li>
+        <li>arr (3)</li>
+        <li>ops (5)</li>
+      </ul>
+    </div>
+  </section>
+
+  <div class="colophon">
+    <span><span class="dot">●</span> homed · arquitetura · live</span>
+    <span>composição em fraunces + jetbrains mono</span>
+    <span>edu · 2026</span>
+  </div>
+
+</div>
+<script>
+(function () {
+  const svg = document.querySelector('.arch-svg');
+  if (!svg) return;
+  const nodes = svg.querySelectorAll('.node[data-id]');
+  const links = svg.querySelectorAll('.link');
+  const labels = svg.querySelectorAll('.link-label');
+
+  function light(id) {
+    svg.classList.add('hovering');
+    const lit = new Set([id]);
+    links.forEach(l => {
+      const f = l.dataset.from, t = l.dataset.to;
+      if (f === id || t === id) {
+        l.classList.add('lit');
+        if (f) lit.add(f);
+        if (t) lit.add(t);
+      }
+    });
+    const trunks = ['apps-trunk', 'apps-trunk-rail', 'probes-rail', 'gatus-up'];
+    if (trunks.some(t => lit.has(t))) {
+      links.forEach(l => {
+        const f = l.dataset.from, t = l.dataset.to;
+        if (trunks.includes(f) || trunks.includes(t)) {
+          l.classList.add('lit');
+          if (f) lit.add(f);
+          if (t) lit.add(t);
+        }
+      });
+    }
+    nodes.forEach(n => { if (lit.has(n.dataset.id)) n.classList.add('lit'); });
+    labels.forEach(lb => {
+      const link = lb.dataset.link;
+      if (!link) return;
+      const parts = link.split(':');
+      if (parts.length === 1 ? lit.has(parts[0]) : (lit.has(parts[0]) && lit.has(parts[1]))) {
+        lb.classList.add('lit');
+      }
+    });
+  }
+  function reset() {
+    svg.classList.remove('hovering');
+    nodes.forEach(n => n.classList.remove('lit'));
+    links.forEach(l => l.classList.remove('lit'));
+    labels.forEach(lb => lb.classList.remove('lit'));
+  }
+  nodes.forEach(n => {
+    n.addEventListener('mouseenter', () => light(n.dataset.id));
+    n.addEventListener('mouseleave', reset);
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+services:
+  h-gatus:
+    image: twinproduction/gatus:v5.36.0
+    container_name: h-gatus
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    security_opt: [ no-new-privileges:true ]
+    environment:
+      TZ: Europe/Lisbon
+      GATUS_CONFIG_PATH: /config/config.yaml
+    volumes:
+      - ./config/config.yaml:/config/config.yaml:ro
+      - h-gatus-data:/data                       # SQLite com history dos checks
+    networks:
+      - edge                                     # para chegar a h-auth, h-adguard, etc
+      - internal                                 # para h-valkey:6379
+    labels:
+      caddy: http://gatus.iedora.com
+      caddy.import: authelia
+      caddy.reverse_proxy: "{{upstreams 8080}}"
+
+volumes:
+  h-gatus-data:
+
+networks:
+  edge:
+    external: true
+  internal:
+    external: true

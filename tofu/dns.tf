@@ -9,6 +9,9 @@ locals {
   # novos serviços públicos são criados.
   subdomains = toset([
     "auth",
+    "adguard",
+    "deploy",
+    "gatus",
     "home",
     "musica",
     "lidarr",

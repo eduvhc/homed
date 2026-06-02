@@ -28,6 +28,8 @@ x-restic-base: &restic-base
     # repo local (apenas dev/OrbStack — em prod RESTIC_REPOSITORY aponta para R2)
     - h-restic-repo:/repo
     - ./excludes:/etc/restic/excludes:ro
+  networks:
+    - edge   # para chegar a h-gatus:8080
 
 services:
   # ─── backup: snapshot incremental diário ───
@@ -39,8 +41,8 @@ services:
       BACKUP_CRON: "0 0 2 * * *"           # daily 02:00 (formato 6 campos)
       RESTIC_BACKUP_SOURCES: "/source"
       RESTIC_BACKUP_ARGS: "--tag scheduled --exclude-file=/etc/restic/excludes"
-      POST_COMMANDS_SUCCESS: 'curl -fsS -m 10 --retry 3 "$$HC_PING_URL"'
-      POST_COMMANDS_FAILURE: 'curl -fsS -m 10 --retry 3 "$$HC_PING_URL/fail"'
+      POST_COMMANDS_SUCCESS: 'curl -fsS -m 10 --retry 3 -X POST "http://h-gatus:8080/api/v1/endpoints/ops_restic-backup/external?token=$$GATUS_TOKEN&success=true"'
+      POST_COMMANDS_FAILURE: 'curl -fsS -m 10 --retry 3 -X POST "http://h-gatus:8080/api/v1/endpoints/ops_restic-backup/external?token=$$GATUS_TOKEN&success=false"'
 
   # ─── check: integridade semanal ───
   h-restic-check:
@@ -52,7 +54,8 @@ services:
       SKIP_INIT: "true"             # evita race condition de init no /repo partilhado
       CHECK_CRON: "0 0 3 * * 0"            # Sunday 03:00
       RESTIC_CHECK_ARGS: "--read-data-subset=5%"   # 5% sample por semana
-      POST_COMMANDS_FAILURE: 'curl -fsS -m 10 --retry 3 "$$HC_PING_URL/fail"'
+      POST_COMMANDS_SUCCESS: 'curl -fsS -m 10 --retry 3 -X POST "http://h-gatus:8080/api/v1/endpoints/ops_restic-check/external?token=$$GATUS_TOKEN&success=true"'
+      POST_COMMANDS_FAILURE: 'curl -fsS -m 10 --retry 3 -X POST "http://h-gatus:8080/api/v1/endpoints/ops_restic-check/external?token=$$GATUS_TOKEN&success=false"'
 
   # ─── forget: aplicar retention semanalmente ───
   h-restic-forget:
@@ -69,10 +72,15 @@ services:
         --keep-weekly 4
         --keep-monthly 12
         --keep-yearly 2
-      POST_COMMANDS_FAILURE: 'curl -fsS -m 10 --retry 3 "$$HC_PING_URL/fail"'
+      POST_COMMANDS_SUCCESS: 'curl -fsS -m 10 --retry 3 -X POST "http://h-gatus:8080/api/v1/endpoints/ops_restic-forget/external?token=$$GATUS_TOKEN&success=true"'
+      POST_COMMANDS_FAILURE: 'curl -fsS -m 10 --retry 3 -X POST "http://h-gatus:8080/api/v1/endpoints/ops_restic-forget/external?token=$$GATUS_TOKEN&success=false"'
 
 volumes:
   h-restic-repo:        # repo local — em prod fica vazio (R2 é o destino real)
   h-valkey-data:        # external — definido por h-valkey stack
     external: true
     name: compose_h-valkey-data
+
+networks:
+  edge:
+    external: true

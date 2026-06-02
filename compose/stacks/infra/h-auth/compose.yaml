@@ -13,8 +13,9 @@ services:
       TZ: Europe/Lisbon
     volumes:
       - ./config:/config
-    ports:
-      - "9091:9091"        # acesso direto para testes OrbStack; em prod, só via Caddy
+    # Sem host port: h-auth é o gateway de auth, não precisa de acesso direto.
+    # Acesso normal via auth.iedora.com → Caddy → h-auth (Caddy routing por Host header).
+    # Para testes locais: `curl -H "Host: auth.iedora.com" http://localhost:18080/...`
     networks:
       - edge
       - internal           # para chegar a h-valkey
