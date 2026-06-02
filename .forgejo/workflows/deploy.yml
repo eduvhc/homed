@@ -21,10 +21,10 @@ jobs:
     runs-on: docker
     container:
       image: alpine:3.20
-      # Acesso ao host repo + Docker daemon (DooD).
+      # Acesso ao host repo. /var/run/docker.sock é montado automaticamente
+      # pelo runner (config.yaml: container.docker_host=automount).
       volumes:
         - /Users/eduvhc/homed:/Users/eduvhc/homed:rw
-        - /var/run/docker.sock:/var/run/docker.sock
     steps:
 
       - name: install tooling
