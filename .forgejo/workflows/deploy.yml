@@ -28,8 +28,9 @@ jobs:
     steps:
 
       - name: install tooling
+        # task (go-task) não é necessário — inline o que ele faz no compose pull/up.
         run: |
-          apk add --no-cache git docker-cli sops age go-task curl bash
+          apk add --no-cache git docker-cli sops age curl
           mkdir -p /usr/local/libexec/docker/cli-plugins
           curl -fsSL "https://github.com/docker/compose/releases/download/v2.31.0/docker-compose-linux-$(uname -m)" \
             -o /usr/local/libexec/docker/cli-plugins/docker-compose
@@ -59,11 +60,21 @@ jobs:
             docker network ls --format '{{.Name}}' | grep -q "^$n$" || docker network create "$n"
           done
 
-      - name: decrypt secrets + compose pull/up (exclui runners para não se auto-destruir)
+      - name: decrypt secrets
+        # Inline do `task decrypt`: sops decifra cada *.env.sops → *.env (mode 600).
+        run: |
+          export SOPS_AGE_KEY_FILE=$HOME/.config/sops/age/keys.txt
+          cd /Users/eduvhc/homed
+          for f in secrets/*.env.sops; do
+            [ -e "$f" ] || continue
+            out="${f%.sops}"
+            sops -d --input-type dotenv --output-type dotenv "$f" > "$out"
+            chmod 600 "$out"
+          done
+
+      - name: compose pull + up (exclui runners para não se auto-destruir)
         run: |
           cd /Users/eduvhc/homed
-          export SOPS_AGE_KEY_FILE=$HOME/.config/sops/age/keys.txt
-          task decrypt
           SERVICES=$(docker compose -f compose/compose.yaml config --services \
             | grep -vE '^(h-forgejo-runner|forgejo-runner-bootstrap)$' \
             | tr '\n' ' ')
