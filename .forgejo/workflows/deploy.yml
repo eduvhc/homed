@@ -29,12 +29,14 @@ jobs:
 
       - name: install tooling
         run: |
-          apk add --no-cache git docker-cli sops age go-task curl bash openssh-client
+          apk add --no-cache git docker-cli sops age go-task curl bash openssh-client rsync
           mkdir -p /usr/local/libexec/docker/cli-plugins
           curl -fsSL "https://github.com/docker/compose/releases/download/v2.31.0/docker-compose-linux-$(uname -m)" \
             -o /usr/local/libexec/docker/cli-plugins/docker-compose
           chmod +x /usr/local/libexec/docker/cli-plugins/docker-compose
-          docker version --format 'docker {{.Server.Version}} / compose {{.Server.Components}}' || true
+
+      - name: checkout repo (com token auto do Forgejo)
+        uses: https://data.forgejo.org/actions/checkout@v4
 
       - name: setup age key
         run: |
@@ -43,11 +45,20 @@ jobs:
           chmod 600 ~/.config/sops/age/keys.txt
           echo "SOPS_AGE_KEY_FILE=$HOME/.config/sops/age/keys.txt" >> $GITHUB_ENV
 
-      - name: sync homed working tree
+      - name: sync workspace → host working tree
         run: |
+          # rsync preserva permissões, apaga ficheiros que já não existem no repo,
+          # mas mantém os ficheiros gerados em runtime (.env decifrados, data/, etc.).
+          rsync -a --delete \
+            --exclude='/data/' \
+            --exclude='secrets/*.env' \
+            --exclude='secrets/keys/' \
+            --exclude='tofu/.terraform/' \
+            --exclude='.git/' \
+            ./ /Users/eduvhc/homed/
+          # Sincroniza também .git (sem o working tree, só git history)
+          rsync -a --delete .git/ /Users/eduvhc/homed/.git/
           cd /Users/eduvhc/homed
-          git fetch origin main
-          git reset --hard origin/main
           echo "homed @ $(git rev-parse --short HEAD)"
 
       - name: ensure networks
