@@ -13,9 +13,15 @@ tasks:
     cmds:
       - task --list
 
+  networks:
+    desc: Cria as networks Docker partilhadas (idempotente)
+    cmds:
+      - for n in edge internal dns; do docker network ls --format '{{`{{.Name}}`}}' | grep -q "^$n$" || docker network create "$n"; done
+    silent: true
+
   up:
     desc: Decifra secrets e arranca o stack
-    deps: [decrypt]
+    deps: [decrypt, networks]
     cmds:
       - "{{.COMPOSE}} up -d"
 

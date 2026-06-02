@@ -29,8 +29,8 @@ include:
 
 networks:
   edge:
-    name: edge       # h-proxy (caddy) <-> apps expostas
+    external: true   # h-proxy (caddy) <-> apps expostas
   internal:
-    name: internal   # apps <-> Postgres
+    external: true   # apps <-> Postgres
   dns:
-    name: dns        # adguard isolado
+    external: true   # adguard isolado

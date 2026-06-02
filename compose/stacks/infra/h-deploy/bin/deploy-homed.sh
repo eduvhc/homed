@@ -53,7 +53,12 @@ if [[ -f "$LAST_SHA_FILE" ]]; then
   fi
 fi
 
-# 3. Pull imagens com tags pinadas que mudaram.
+# 3. Networks Docker partilhadas (idempotente, igual a `task networks`).
+for n in edge internal dns; do
+  docker network ls --format '{{.Name}}' | grep -q "^$n$" || docker network create "$n"
+done
+
+# 4. Pull imagens com tags pinadas que mudaram.
 log "docker compose pull"
 docker compose -f "$HOMED/compose/compose.yaml" pull --quiet
 
