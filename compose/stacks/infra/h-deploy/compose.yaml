@@ -25,9 +25,9 @@ services:
       # Docker socket — necessário para build/compose dentro do container.
       # Trade-off aceite: socket = root no host. Mitigado por HMAC + tunnel.
       - /var/run/docker.sock:/var/run/docker.sock
-      # Hooks + scripts (read-only).
+      # Hooks + playbooks Ansible (read-only).
       - ./config/hooks.yaml:/etc/webhook/hooks.yaml:ro
-      - ./bin:/usr/local/bin/homed-deploy:ro
+      - ./playbooks:/etc/playbooks:ro
       # Workspace dos repos clonados — persistente para layer cache.
       - h-deploy-workspace:/workspace
       # SSH key para repos privados (mounted read-only, root:root, perms 600 no host).

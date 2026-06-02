@@ -77,9 +77,7 @@ services:
 
 volumes:
   h-restic-repo:        # repo local — em prod fica vazio (R2 é o destino real)
-  h-valkey-data:        # external — definido por h-valkey stack
-    external: true
-    name: compose_h-valkey-data
+  h-valkey-data:        # partilhada com h-valkey stack (mesmo compose project)
 
 networks:
   edge:

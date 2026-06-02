@@ -1,0 +1,63 @@
+# deploy-homed.yml — push ao repo eduvhc/homed.
+#
+# Disparado pelo hook `homed-push`. Estado final pretendido:
+#   - mirror local em /workspace/homed sincronizado com origin/main
+#   - networks Docker partilhadas existem
+#   - imagens das tags pinadas que mudaram estão pulled
+#   - containers cuja config/imagem mudou estão recriados
+#   - heartbeat ao Gatus enviado
+
+- name: deploy homed
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    homed_repo: "git@github.com:eduvhc/homed.git"
+    mirror_path: /workspace/homed
+    homed_path: /homed                      # mount read-only do working tree no host
+    networks: [edge, internal, dns]
+
+  tasks:
+
+    - name: clone/pull mirror local
+      ansible.builtin.git:
+        repo: "{{ homed_repo }}"
+        dest: "{{ mirror_path }}"
+        version: main
+        depth: 50
+        force: true
+        accept_hostkey: true
+
+    - name: registar SHA actual
+      ansible.builtin.command: git -C {{ mirror_path }} rev-parse --short HEAD
+      register: homed_sha
+      changed_when: false
+
+    - name: ensure networks partilhadas
+      community.docker.docker_network:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ networks }}"
+
+    - name: docker compose pull (imagens com tags pinadas)
+      community.docker.docker_compose_v2:
+        project_src: "{{ homed_path }}/compose"
+        pull: always
+        state: present
+      register: compose_pull
+
+    - name: heartbeat OK ao Gatus
+      ansible.builtin.uri:
+        url: "http://h-gatus:8080/api/v1/endpoints/ops_deploy-homed/external?token={{ lookup('env', 'GATUS_TOKEN') }}&success=true"
+        method: POST
+        timeout: 5
+        status_code: [200, 201, 204]
+      failed_when: false      # heartbeat não-fatal
+      when: lookup('env', 'GATUS_TOKEN') | length > 0
+
+    - name: resumo
+      ansible.builtin.debug:
+        msg: "homed @ {{ homed_sha.stdout }} · changed={{ compose_pull.changed }}"
+
+  handlers: []
