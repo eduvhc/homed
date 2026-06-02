@@ -1,12 +1,13 @@
 # Deploy do homed via Forgejo Actions.
-# Substitui h-deploy: o runner faz exactamente o que o playbook fazia.
+# Substitui h-deploy: o runner sincroniza o working tree do host com a SHA
+# que disparou o workflow, e corre `task up`.
 #
 # Pré-requisitos no Forgejo:
-#   - Secret `SOPS_AGE_KEY` (base64 da chave age) registado em
-#     forge.iedora.com/edu/homed → Settings → Actions → Secrets
+#   - Secret `SOPS_AGE_KEY` (base64) em forge.iedora.com/edu/homed → Settings → Secrets
 #
-# O runner monta /Users/eduvhc/homed read-write no job container.
-# `task up` é a interface canónica: decifra secrets + compose up -d.
+# O job container monta /Users/eduvhc/homed:rw e fala com o daemon do host
+# via socket (DooD, automount pelo runner). Não há rsync, não há cópia:
+# o git pull é feito directamente no working tree do host.
 
 name: deploy
 run-name: "deploy @ ${{ forge.sha }}"
@@ -21,45 +22,36 @@ jobs:
     runs-on: docker
     container:
       image: alpine:3.20
-      # Acesso ao host repo. /var/run/docker.sock é montado automaticamente
-      # pelo runner (config.yaml: container.docker_host=automount).
+      # Acesso ao host repo. /var/run/docker.sock vem automount do runner.
       volumes:
         - /Users/eduvhc/homed:/Users/eduvhc/homed:rw
     steps:
 
       - name: install tooling
         run: |
-          apk add --no-cache git docker-cli sops age go-task curl bash openssh-client rsync
+          apk add --no-cache git docker-cli sops age go-task curl bash
           mkdir -p /usr/local/libexec/docker/cli-plugins
           curl -fsSL "https://github.com/docker/compose/releases/download/v2.31.0/docker-compose-linux-$(uname -m)" \
             -o /usr/local/libexec/docker/cli-plugins/docker-compose
           chmod +x /usr/local/libexec/docker/cli-plugins/docker-compose
-
-      - name: checkout repo (com token auto do Forgejo)
-        uses: https://data.forgejo.org/actions/checkout@v4
 
       - name: setup age key
         run: |
           mkdir -p ~/.config/sops/age
           echo "${{ secrets.SOPS_AGE_KEY }}" | base64 -d > ~/.config/sops/age/keys.txt
           chmod 600 ~/.config/sops/age/keys.txt
-          echo "SOPS_AGE_KEY_FILE=$HOME/.config/sops/age/keys.txt" >> $GITHUB_ENV
 
-      - name: sync workspace → host working tree
+      - name: sync host working tree
+        # Auth via token auto do Forgejo Actions (legacy name `github.token`).
+        # Reset hard à SHA do push — local edits não committed são wiped (esperado).
         run: |
-          # rsync preserva permissões, apaga ficheiros que já não existem no repo,
-          # mas mantém os ficheiros gerados em runtime (.env decifrados, data/, etc.).
-          rsync -a --delete \
-            --exclude='/data/' \
-            --exclude='secrets/*.env' \
-            --exclude='secrets/keys/' \
-            --exclude='tofu/.terraform/' \
-            --exclude='.git/' \
-            ./ /Users/eduvhc/homed/
-          # Sincroniza também .git (sem o working tree, só git history)
-          rsync -a --delete .git/ /Users/eduvhc/homed/.git/
           cd /Users/eduvhc/homed
-          echo "homed @ $(git rev-parse --short HEAD)"
+          git config --global --add safe.directory /Users/eduvhc/homed
+          git remote set-url origin https://forge.iedora.com/edu/homed.git
+          git -c http.extraheader="Authorization: bearer ${{ github.token }}" \
+              fetch --depth=1 origin "${{ forge.sha }}"
+          git reset --hard "${{ forge.sha }}"
+          echo "synced to $(git rev-parse --short HEAD)"
 
       - name: ensure networks
         run: |
@@ -67,13 +59,14 @@ jobs:
             docker network ls --format '{{.Name}}' | grep -q "^$n$" || docker network create "$n"
           done
 
-      - name: deploy (decrypt + compose pull + up, exclui h-forgejo-runner)
+      - name: decrypt secrets + compose pull/up (exclui runners para não se auto-destruir)
         run: |
           cd /Users/eduvhc/homed
           export SOPS_AGE_KEY_FILE=$HOME/.config/sops/age/keys.txt
           task decrypt
-          # Lista services menos os auto-destrutivos (runner é o que está a correr este job).
-          SERVICES=$(docker compose -f compose/compose.yaml config --services | grep -vE '^(h-forgejo-runner|forgejo-runner-bootstrap)$' | tr '\n' ' ')
+          SERVICES=$(docker compose -f compose/compose.yaml config --services \
+            | grep -vE '^(h-forgejo-runner|forgejo-runner-bootstrap)$' \
+            | tr '\n' ' ')
           docker compose -f compose/compose.yaml pull --quiet --policy missing $SERVICES || true
           docker compose -f compose/compose.yaml up -d --remove-orphans $SERVICES
 
@@ -83,4 +76,4 @@ jobs:
           TOKEN=$(grep '^GATUS_TOKEN=' /Users/eduvhc/homed/secrets/h-restic.env | cut -d= -f2-)
           curl -fsS -m 5 -X POST \
             "http://h-gatus:8080/api/v1/endpoints/ops_deploy-homed/external?token=${TOKEN}&success=true" \
-            > /dev/null || echo "heartbeat skipped (non-fatal)"
+            > /dev/null || true
