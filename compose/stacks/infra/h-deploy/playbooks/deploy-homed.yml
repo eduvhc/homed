@@ -40,11 +40,23 @@
         state: present
       loop: "{{ networks }}"
 
-    - name: docker compose pull (imagens com tags pinadas)
+    - name: listar todos os services
+      ansible.builtin.command:
+        cmd: docker compose -f {{ homed_path }}/compose/compose.yaml config --services
+      register: all_services
+      changed_when: false
+
+    - name: filtrar h-deploy (não recriamos o próprio container — quebra a execução)
+      ansible.builtin.set_fact:
+        services_to_update: "{{ all_services.stdout_lines | reject('equalto', 'h-deploy') | list }}"
+
+    - name: docker compose pull + up (sem h-deploy)
       community.docker.docker_compose_v2:
         project_src: "{{ homed_path }}/compose"
+        services: "{{ services_to_update }}"
         pull: always
         state: present
+        remove_orphans: false
       register: compose_pull
 
     - name: heartbeat OK ao Gatus
