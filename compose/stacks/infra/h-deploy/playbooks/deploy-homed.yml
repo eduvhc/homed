@@ -54,7 +54,7 @@
       community.docker.docker_compose_v2:
         project_src: "{{ homed_path }}/compose"
         services: "{{ services_to_update }}"
-        pull: always
+        pull: missing      # 'always' tenta puxar imagens built-locally (h-yt-dlp etc.) e falha
         state: present
         remove_orphans: false
       register: compose_pull
