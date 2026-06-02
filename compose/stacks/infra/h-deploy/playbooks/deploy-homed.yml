@@ -15,7 +15,8 @@
   vars:
     homed_repo: "git@github.com:eduvhc/homed.git"
     mirror_path: /workspace/homed
-    homed_path: /homed                      # mount read-only do working tree no host
+    homed_path: /Users/eduvhc/homed         # mesmo path dentro e fora do container
+                                            # (mount path-consistent — ver compose.yaml)
     networks: [edge, internal, dns]
 
   tasks:

@@ -36,7 +36,12 @@ services:
       # Log de deploys (rotated 10 MB × 5 pelo daemon docker).
       - ../../../../data/deploy/:/var/log/deploy/
       # Acesso ao homed local — para `docker compose -f compose/compose.yaml up`.
-      - /Users/eduvhc/homed:/homed:ro
+      # IMPORTANTE: source e target têm que ser idênticos. O Docker daemon
+      # resolve bind-mounts contra o filesystem do host; se compose.yaml usar
+      # paths relativos, eles têm que resolver para o mesmo caminho real
+      # quer dentro quer fora do container. Caso contrário, o daemon cria
+      # directorias vazias no path "errado" e os containers ficam broken.
+      - /Users/eduvhc/homed:/Users/eduvhc/homed:ro
     networks:
       - edge      # para o Caddy chegar até cá
     labels:

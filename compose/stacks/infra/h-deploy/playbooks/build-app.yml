@@ -22,7 +22,7 @@
     short_sha: "{{ sha[:7] }}"
     repo_url: "git@github.com:lyzer/{{ app }}.git"
     workdir: "/workspace/{{ app }}"
-    homed_path: /homed
+    homed_path: /Users/eduvhc/homed
     image: "lyzer/{{ app }}"
     # Mapping repo → service (ajustar se nomes divergirem)
     service_map:
