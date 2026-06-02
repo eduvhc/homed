@@ -19,6 +19,12 @@ tasks:
       - for n in edge internal dns; do docker network ls --format '{{`{{.Name}}`}}' | grep -q "^$n$" || docker network create "$n"; done
     silent: true
 
+  docker-sock-gid:
+    desc: Detecta GID do docker.sock no host (export via DOCKER_SOCK_GID)
+    cmds:
+      - docker run --rm -v /var/run/docker.sock:/var/run/docker.sock alpine stat -c '%g' /var/run/docker.sock
+    silent: true
+
   up:
     desc: Decifra secrets e arranca o stack
     deps: [decrypt, networks]

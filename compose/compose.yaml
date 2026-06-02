@@ -10,6 +10,8 @@ include:
   - stacks/infra/h-auth/compose.yaml
   - stacks/infra/h-postgres/compose.yaml
   - stacks/infra/h-deploy/compose.yaml
+  - stacks/infra/h-forgejo/compose.yaml
+  - stacks/infra/h-forgejo-runner/compose.yaml
   - stacks/network/h-adguard/compose.yaml
   - stacks/ops/h-whoami/compose.yaml      # backend de teste para validar Caddy + Authelia
   - stacks/media/navidrome/compose.yaml

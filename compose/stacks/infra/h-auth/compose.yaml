@@ -11,8 +11,15 @@ services:
       - ../../../../secrets/h-auth.env     # decifrado por `task up` (sops -> plaintext, 600)
     environment:
       TZ: Europe/Lisbon
+      # Activa template engine: a config usa {{ secret "/config/oidc-issuer.pem" }}
+      # para carregar a RSA key sem a deixar plaintext no YAML.
+      # Source: internal/configuration/koanf_provider_filtered_file.go:140
+      X_AUTHELIA_CONFIG_FILTERS: template
     volumes:
       - ./config:/config
+      # OIDC issuer RSA key — lida via template `{{ secret ... }}`.
+      # NÃO :ro porque o rootless container faz chown na startup.
+      - ../../../../secrets/keys/oidc-issuer.pem:/config/oidc-issuer.pem
     # Sem host port: h-auth é o gateway de auth, não precisa de acesso direto.
     # Acesso normal via auth.iedora.com → Caddy → h-auth (Caddy routing por Host header).
     # Para testes locais: `curl -H "Host: auth.iedora.com" http://localhost:18080/...`

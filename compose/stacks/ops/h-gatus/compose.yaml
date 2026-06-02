@@ -7,6 +7,8 @@ services:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
     security_opt: [ no-new-privileges:true ]
+    env_file:
+      - ../../../../secrets/h-gatus.env          # OIDC_GATUS_CLIENT_SECRET
     environment:
       TZ: Europe/Lisbon
       GATUS_CONFIG_PATH: /config/config.yaml
@@ -18,7 +20,8 @@ services:
       - internal                                 # para h-valkey:6379
     labels:
       caddy: http://gatus.iedora.com
-      caddy.import: authelia
+      # SEM caddy.import: authelia — Gatus tem OIDC nativo (security/oidc.go).
+      # Login: redirect a auth.iedora.com → callback /authorization-code/callback.
       caddy.reverse_proxy: "{{upstreams 8080}}"
 
 volumes:

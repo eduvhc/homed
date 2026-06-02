@@ -11,6 +11,7 @@ locals {
     "auth",
     "adguard",
     "deploy",
+    "forge",
     "gatus",
     "home",
     "musica",
