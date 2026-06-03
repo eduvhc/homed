@@ -34,6 +34,9 @@ services:
       - ../../../secrets/h-forgejo.env
     environment:
       BOOTSTRAP_STEP: admin
+      # Migração idempotente: se admin "edu" existe (de bootstrap anterior),
+      # renomeia para FORGEJO_ADMIN_USERNAME atual. Pós-rename vira no-op.
+      FORGEJO_ADMIN_PREVIOUS_USERNAME: edu
     volumes: *forgejo-volumes
     networks: [internal]
 

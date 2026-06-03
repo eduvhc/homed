@@ -227,6 +227,60 @@ Após qualquer mudança:
 
 Standard exige zero warnings em config -q antes de commit.
 
+## Operações: NUNCA bash ad-hoc, NUNCA tasks one-off (regra dura)
+
+**Toda operação vive num init container idempotente ou num task target
+idempotente.** Comandos `docker exec ... DROP`, `docker volume rm`, `sudo rm`,
+ou tasks com `CONFIRM=yes`-style one-off são proibidos *até prova em contrário* com:
+- Referência ao source code upstream (cita ficheiro:linha)
+- OU referência à doc oficial (URL)
+- OU justificação documentada de que NÃO existe forma idempotente
+
+### Idempotência: cada task / step pode correr N vezes com mesmo resultado
+
+- Bom: `task up-bootstrap` cria role+DB se não existem, cria admin se não existe, etc.
+- Mau: `task forgejo-reset CONFIRM=yes` (destrói state — uma vez só, irreversível)
+
+Tasks "reset" / "wipe" / "drop" são quase sempre o sinal de que a migração
+deveria estar **encoded no init container**. Exemplos:
+
+| Problema | Anti-pattern (one-off) | Padrão (idempotente) |
+|---|---|---|
+| Rename admin | `task forgejo-reset` + manual recreate | `FORGEJO_ADMIN_PREVIOUS_USERNAME` env + auto-rename em admin.sh |
+| Drop DB para reseed | `docker exec ... DROP` | init container detecta versão obsoleta, faz migration |
+| Limpar volumes | `docker volume rm` | volumes com names estáveis; bind mounts no `/data/<svc>/` que pode ser limpo declarativamente |
+
+### Template canónico: auto-migração idempotente em init step
+
+```sh
+#!/bin/sh
+set -eu
+: "${TARGET_USERNAME:?}"
+
+CONFIG=/etc/<app>/<conf>
+HAS_USER() { app --config "$CONFIG" admin list | awk 'NR>1 {print $2}' | grep -qx "$1"; }
+
+# Migração: se OLD existe e TARGET não, renomeia. Pós-rename, OLD não existe → noop.
+OLD="${TARGET_PREVIOUS_USERNAME:-}"
+if [ -n "$OLD" ] && [ "$OLD" != "$TARGET_USERNAME" ] \
+   && HAS_USER "$OLD" && ! HAS_USER "$TARGET_USERNAME"; then
+  app --config "$CONFIG" admin rename --from "$OLD" --to "$TARGET_USERNAME"
+fi
+
+# Create se ainda não existe.
+HAS_USER "$TARGET_USERNAME" || app --config "$CONFIG" admin create --username "$TARGET_USERNAME" ...
+```
+
+A migração env var (`TARGET_PREVIOUS_USERNAME`) fica no compose **para sempre**
+como log declarativo da migração. Não há custo (idempotente noop pós-rename).
+
+### Quando bash directo é aceitável
+
+- Read-only investigation (`task ps`, `task logs NAME=X`, `docker inspect`, `rg`)
+- Source-verification antes de escrever um step (`rg "..." references/`)
+
+**Mutação (DROP, rm, kill, restart) sempre via task target idempotente OU init container.**
+
 ## Reference: a homed reference repository
 
 O setup em `/Users/eduvhc/homed` (público em github.com/eduvhc/homed) é uma implementação completa deste standard — 19 services, single-container backup engine, multiplex bootstrap images, layout flat, declarative end-to-end. Quando em dúvida sobre pattern: ler o equivalente em h-* lá. Não copiar cegamente — confirmar ainda current via source.
