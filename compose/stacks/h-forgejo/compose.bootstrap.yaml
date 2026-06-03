@@ -3,6 +3,18 @@
 # Image reusada da init.yaml (forgejo-bootstrap:2.0.0, build via forgejo-admin-bootstrap).
 
 services:
+  # named volumes são root:root on first mount. forgejo-config-bootstrap corre
+  # como UID 1000 (do image rootless) e precisa de write em /shared. Mirror do
+  # pattern h-navidrome-perms.
+  forgejo-creds-perms:
+    image: alpine:3.20
+    container_name: forgejo-creds-perms
+    profiles: [bootstrap]
+    restart: "no"
+    volumes:
+      - h-forgejo-creds:/shared
+    entrypoint: ["sh", "-c", "chown 1000:1000 /shared && echo '✓ /shared owner=1000:1000'"]
+
   forgejo-config-bootstrap:
     image: forgejo-bootstrap:2.0.0
     container_name: forgejo-config-bootstrap
@@ -10,6 +22,7 @@ services:
     restart: "no"
     depends_on:
       forgejo-admin-bootstrap: { condition: service_completed_successfully }
+      forgejo-creds-perms:     { condition: service_completed_successfully }
     env_file:
       - ../../../secrets/h-forgejo.env
     environment:
