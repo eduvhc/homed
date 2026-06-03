@@ -32,6 +32,47 @@ x-restic-base: &restic-base
     - edge   # para chegar a h-gatus:8080
 
 services:
+  # ─── dump diário do Postgres (consumido read-only pelo h-restic-backup) ───
+  # Vive aqui (não em h-postgres) por SRP: backup é responsabilidade do stack
+  # de backup; h-postgres fica pura infra DB. Cross-stack DB connection via
+  # network `internal` + DNS h-postgres.
+  h-postgres-dump:
+    image: prodrigestivill/postgres-backup-local:17
+    container_name: h-postgres-dump
+    restart: unless-stopped
+    depends_on:
+      h-postgres:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "3" }
+    security_opt: [ no-new-privileges:true ]
+    env_file:
+      - ../../../../secrets/h-postgres.env
+    environment:
+      TZ: Europe/Lisbon
+      POSTGRES_HOST: h-postgres
+      POSTGRES_DB: postgres                  # ignorado quando usamos pg_dumpall
+      POSTGRES_USER: postgres
+      POSTGRES_EXTRA_OPTS: "--clean --if-exists"
+      BACKUP_DIR: /backups
+      POSTGRES_CLUSTER: "TRUE"               # pg_dumpall: roles + todas as DBs
+      SCHEDULE: "0 1 * * *"                  # 01:00 (1h antes do restic 02:00)
+      BACKUP_KEEP_DAYS: 7
+      BACKUP_KEEP_WEEKS: 4
+      BACKUP_KEEP_MONTHS: 1
+      HEALTHCHECK_PORT: 8080
+    volumes:
+      - ../../../../data/postgres-dumps:/backups
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h h-postgres -U postgres"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   # ─── backup: snapshot incremental diário ───
   h-restic-backup:
     <<: *restic-base
@@ -81,4 +122,6 @@ volumes:
 
 networks:
   edge:
+    external: true
+  internal:
     external: true

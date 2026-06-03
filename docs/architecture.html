@@ -1479,9 +1479,15 @@
         </div>
         <p class="dec-why">
           Pesquisa em 2026 (Authentik, Forgejo docs, juftin/homelab, Haxxnet/Compose-Examples): <b>nenhum repo popular splita bootstrap em files separados por service</b>. O padrão consensual é "tudo no <code>compose.yaml</code> do stack, profiles para gating".
-          <b>Mas</b> quando 1 service tem ciclo de vida divergente (tem <code>build:</code>, é opt-in, partilha state com outra stack), vale isolar num <code>compose.bootstrap.yaml</code> próprio — torna explícito que não corre em todos os <code>compose up</code>.
-          Aplicado ao <code>h-forgejo</code>: 3 services runtime (db-bootstrap, server, admin-bootstrap) no <code>compose.yaml</code> com <code>x-forgejo-image</code> + <code>x-forgejo-db-env</code> anchors para reduzir duplicação; <code>forgejo-config-bootstrap</code> (PAT+webhook via API, profile=bootstrap) isolado no <code>compose.bootstrap.yaml</code>.
-          Mesma convenção será aplicada às apps Lyzer (<code>imopush</code>, <code>meta</code>): <code>compose.yaml</code> com app + db-bootstrap + db-migrate (todos runtime); <code>compose.bootstrap.yaml</code> opcional para state externo (ex. config OIDC pre-seeded).
+          <b>Mas</b> quando 1 service tem ciclo de vida divergente, vale isolar num <code>compose.bootstrap.yaml</code> próprio — torna explícito que não corre em todos os <code>compose up</code>.
+        </p>
+        <p class="dec-why">
+          <b>Regra operacional</b> — vai para <code>compose.bootstrap.yaml</code> quando cumprir <b>≥2 de 4</b>: tem <code>build:</code> · está sob <code>profiles: [bootstrap]</code> · partilha state cross-stack (volume consumido por outra stack) · só faz trabalho útil em máquinas novas.
+          O ciclo de vida (one-shot vs long-running) <b>não é critério</b> — um agente long-running cuja existência depende de outro service bootstrap legitima a entrada no ficheiro.
+        </p>
+        <p class="dec-why">
+          Aplicações: <code>h-forgejo</code> → <code>forgejo-config-bootstrap</code> em <code>compose.bootstrap.yaml</code> (4/4: build + profile + cross-stack volume + new-machine); <code>h-doco-cd</code> → o agente vive em <code>compose.bootstrap.yaml</code> (3/4: profile + cross-stack <code>h-forgejo-creds</code> + new-machine), apesar de <code>restart: unless-stopped</code>;
+          <code>forgejo-{db,admin,oidc}-bootstrap</code> e <code>h-auth-key-bootstrap</code>, <code>h-navidrome-perms</code> ficam no runtime <code>compose.yaml</code> (1/4 cada — só new-machine).
         </p>
       </article>
 

@@ -39,52 +39,6 @@ services:
       retries: 6
       start_period: 30s
 
-  # ─── dump diário para o Restic apanhar ───
-  # Imagem dedicada (prodrigestivill) — scheduler embutido, gzip, retention.
-  # Escreve para o mesmo host path que h-restic monta read-only.
-  h-postgres-dump:
-    image: prodrigestivill/postgres-backup-local:17
-    container_name: h-postgres-dump
-    restart: unless-stopped
-    depends_on:
-      h-postgres:
-        condition: service_healthy
-    logging:
-      driver: json-file
-      options: { max-size: "5m", max-file: "3" }
-    security_opt: [ no-new-privileges:true ]
-    env_file:
-      - ../../../../secrets/h-postgres.env
-    environment:
-      TZ: Europe/Lisbon
-      POSTGRES_HOST: h-postgres
-      POSTGRES_DB: postgres                  # ignorado quando usamos pg_dumpall
-      POSTGRES_USER: postgres
-      POSTGRES_EXTRA_OPTS: "--clean --if-exists"
-      BACKUP_DIR: /backups
-      # dump global (pg_dumpall) — captura roles + todas as DBs num só ficheiro
-      POSTGRES_CLUSTER: "TRUE"
-      # janela: dump à 01:00 (1h antes do restic às 02:00)
-      SCHEDULE: "0 1 * * *"
-      # retention local (o R2 via restic mantém retention real)
-      BACKUP_KEEP_DAYS: 7
-      BACKUP_KEEP_WEEKS: 4
-      BACKUP_KEEP_MONTHS: 1
-      HEALTHCHECK_PORT: 8080
-    volumes:
-      - ../../../../data/postgres-dumps:/backups
-    networks:
-      - internal
-    # Healthcheck: a imagem não traz curl/wget, e /healthcheck.sh não existe.
-    # Validamos só que o container chega à DB (se chega, vai conseguir dumpar).
-    # O go-cron scheduler em si valida-se via timestamp do último dump em /backups.
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h h-postgres -U postgres"]
-      interval: 1m
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-
 volumes:
   h-postgres-data:
 
