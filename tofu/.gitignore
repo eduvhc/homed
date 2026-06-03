@@ -1,6 +1,6 @@
-# Provider plugins (descarregados por `tofu init`)
+# Provider plugins (descarregados por `tofu init`).
+# .terraform.lock.hcl É committado (provider pinning multi-platform).
 .terraform/
-.terraform.lock.hcl
 
 # Logs e crashes
 crash.log
