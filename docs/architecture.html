@@ -1809,10 +1809,10 @@
         <div class="pins">restic repo · encriptado client-side</div>
       </div>
       <div class="box wide">
-        <div class="marker">macOS</div>
-        <div class="name">keychain <span class="ver">login</span></div>
-        <div class="role">Única credencial fora do repo: <i>CLOUDFLARE_API_TOKEN</i> + passphrase do state encryption.</div>
-        <div class="pins">security find-generic-password</div>
+        <div class="marker">cross-os</div>
+        <div class="name">bws <span class="ver">secrets manager</span></div>
+        <div class="role">Única credencial fora do repo: <i>BWS_ACCESS_TOKEN</i> do operador. Projecto contém <i>CLOUDFLARE_API_TOKEN</i>, <i>HOMED_TOFU_ENCRYPTION</i>, <i>HOMED_AGE_KEY</i>. Server nunca toca em bws.</div>
+        <div class="pins">bws run · macOS · Linux · Windows WSL2</div>
       </div>
     </div>
   </section>
@@ -2036,7 +2036,7 @@
       <ul>
         <li><b>01</b> · reproduzível noutra máquina em &lt; 1h</li>
         <li><b>02</b> · git é o source-of-truth — UI state proibido</li>
-        <li><b>03</b> · uma só credencial fora do repo (keychain)</li>
+        <li><b>03</b> · uma só credencial fora do repo (bws machine-account, cross-OS)</li>
         <li><b>04</b> · SRP — secrets centralizados, nunca por-serviço</li>
         <li><b>05</b> · pin de versões — zero <i>:latest</i></li>
         <li><b>06</b> · nada exposto no host — tudo via Caddy + Authelia</li>

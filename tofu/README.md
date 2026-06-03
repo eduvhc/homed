@@ -79,23 +79,18 @@ task tofu-apply               # aplica
 task tofu-sync-secrets        # exporta tunnel_token para secrets/h-cloudflared.env (encriptado in-place)
 ```
 
-**O que está em cache no keychain:**
+**O que está no projecto bws** (operador, qualquer OS):
 - `CLOUDFLARE_API_TOKEN` — adicionado por ti
-- `HOMED_TOFU_ENCRYPTION` — gerado automaticamente no primeiro `task tofu-*` para encriptar o state
+- `HOMED_TOFU_ENCRYPTION` — passphrase para state encryption (gerar com `openssl rand -hex 32`)
+- `HOMED_AGE_KEY` — chave privada age usada por sops (ver `scripts/bootstrap-age-key.sh`)
 
 **O que vem da CF API em runtime (não persistido):**
 - `cf_account_id` (descoberto de `/accounts`)
 - `cf_zone_id` (descoberto de `/zones?name=iedora.com`)
 
-## Para Linux (Beelink)
-
-macOS Keychain não existe em Linux. Antes de correr no Beelink, exportar via:
-```bash
-export CLOUDFLARE_API_TOKEN="<token>"
-export HOMED_TOFU_ENCRYPTION="<passphrase gerado no Mac>"
-```
-(ou alternativa: gravar em sops `secrets/tofu.env` e ajustar Taskfile com fallback).
-Por agora, Tofu corre apenas no portátil — apply via internet, sem necessidade de tofu no Beelink.
+Beelink não corre `tofu` nem precisa de bws — apply roda no operador, e o
+`tunnel_token` chega ao servidor via `secrets/h-cloudflared.env` (encriptado
+in-place por `task tofu-sync-secrets`).
 
 ## Boundary com o resto
 

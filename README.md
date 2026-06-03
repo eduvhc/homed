@@ -32,18 +32,38 @@ imediatamente o que pertence ao stack na lista de containers.
 
 ## Bring-up numa máquina nova (runbook)
 
+Cross-OS (macOS, Linux, Windows WSL2). Zero ficheiros pré-existentes —
+credenciais saem de **Bitwarden Secrets Manager** via `bws`; versões das
+CLIs vêm de **mise** (`.mise.toml` na raiz).
+
 ```bash
-# 1. Debian 12 net-install no Beelink
-# 2. Importar chave age (YubiKey ou ficheiro offline) → ~/.config/sops/age/keys.txt
+# 1. Operador (qualquer OS): instalar mise + exportar credenciais bws
+curl -fsSL https://mise.run | sh
+export BWS_ACCESS_TOKEN=<machine-account-token>
+export HOMED_BWS_PROJECT_ID=<project-uuid>
+
+# 2. Clone + tools pinned
 git clone <repo-url> ~/homed && cd ~/homed
-task provision                         # ansible: docker, restic, sops, tailscale
-task tofu-apply                        # tunnel creds, R2, DNS
-task up-bootstrap                      # decrypt + build images + compose up --profile bootstrap
+mise install                           # sops, age, task, opentofu, bws, jq (~30s)
+
+# 3. ansible: instalar separado (não é pin do .mise.toml)
+#    macOS via nix-darwin já tem. WSL2/Linux: pipx install ansible
+#    (justificação: ansible push-only, evita pipx/Python no .mise.toml)
+
+# 4. Age key + provision do servidor
+task bootstrap-age-key                 # bws → ~/.config/sops/age/keys.txt (operator)
+task provision HOST=beelink            # ansible: docker, mise + tools, tailscale, copy age key
+task tofu-apply                        # CF tunnel/DNS/R2 (state encriptado, vars de bws)
+
+# 5. Servidor: arranca o stack (SSH ao Beelink)
+ssh beelink
+cd ~/homed && task up-bootstrap        # decrypt + build images + compose --profile bootstrap
 ```
 
+Beelink nunca toca em bws — a age key chega-lhe via `ansible.builtin.copy`.
+Versões das CLIs no Beelink vêm de `mise install` corrido pelo provision.
 `task up-bootstrap` corre o profile `bootstrap` (PAT/webhook do Forgejo,
-seed do doco-cd, init do Postgres). Em re-runs do dia-a-dia usa `task up`
-— mesma stack, sem os one-shots de bootstrap.
+seed do doco-cd, init do Postgres). Em re-runs do dia-a-dia usa `task up`.
 
 ## Operação diária
 
