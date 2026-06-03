@@ -60,19 +60,21 @@ if [ ! -s "$TOKEN_FILE" ]; then
     | jq -r '.sha1')
   [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] || { echo "✗ falha a criar PAT"; exit 1; }
   printf '%s' "$TOKEN" > "$TOKEN_FILE"
-  chmod 644 "$TOKEN_FILE"   # h-doco-cd lê com UID diferente; volume isolation já protege
   echo "✓ PAT criado: $TOKEN_NAME"
 else
   echo "skip: PAT já existe em $TOKEN_FILE"
 fi
+# chmod sempre (idempotente) — h-doco-cd lê com UID ≠ 1000.
+# Source: doco-cd/internal/config/app/app_config.go:35 (caarlos0/env `,file` tag → os.ReadFile)
+chmod 644 "$TOKEN_FILE"
 
 # 3. Webhook secret — uma vez por volume
 SECRET_FILE="$SHARED/webhook_secret"
 if [ ! -s "$SECRET_FILE" ]; then
   head -c 32 /dev/urandom | od -A n -t x1 | tr -d ' \n' > "$SECRET_FILE"
-  chmod 644 "$SECRET_FILE"
   echo "✓ webhook secret gerado"
 fi
+chmod 644 "$SECRET_FILE"   # idem
 SECRET=$(cat "$SECRET_FILE")
 
 # 4. Webhook upsert
