@@ -103,8 +103,10 @@ tasks:
       Source: setting/security.go:304-309 — se ausentes E InstallLock=true,
       forgejo tenta saveCfg para app.ini (que está :ro). Pré-fornecer via
       env (SOPS) evita o write fail. Skip se já presentes em secrets.
+      NÃO re-encripta no fim — secrets ficam decrypted em disco para o
+      compose up ler env_file (normal — task lock é manual antes de commit).
+    deps: [decrypt]
     cmd: |
-      task decrypt
       need=0
       grep -q '^FORGEJO__security__INTERNAL_TOKEN=' secrets/h-forgejo.env || need=1
       grep -q '^FORGEJO__security__SECRET_KEY='     secrets/h-forgejo.env || need=1
@@ -114,11 +116,10 @@ tasks:
           echo "FORGEJO__security__INTERNAL_TOKEN=$(docker run --rm "$FORGEJO_IMG" forgejo generate secret INTERNAL_TOKEN)" >> secrets/h-forgejo.env
         grep -q '^FORGEJO__security__SECRET_KEY=' secrets/h-forgejo.env || \
           echo "FORGEJO__security__SECRET_KEY=$(docker run --rm "$FORGEJO_IMG" forgejo generate secret SECRET_KEY)" >> secrets/h-forgejo.env
-        echo "✓ Forgejo INTERNAL_TOKEN + SECRET_KEY gerados em secrets/h-forgejo.env"
+        echo "✓ Forgejo INTERNAL_TOKEN + SECRET_KEY gerados — corre task lock antes de commit"
       else
         echo "skip: Forgejo secrets já presentes"
       fi
-      task lock
     silent: true
 
   build-bootstrap-db:
