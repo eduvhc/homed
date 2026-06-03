@@ -115,19 +115,21 @@ services:
       FORGEJO__security__INSTALL_LOCK: "true"
     volumes: *forgejo-volumes
     networks: [internal]
-    entrypoint: ["/bin/sh", "-c"]
-    command: |
-      set -e
-      if forgejo admin user list 2>/dev/null | awk 'NR>1 {print $$2}' | grep -qx "$$FORGEJO_ADMIN_USERNAME"; then
-        echo "skip: admin '$$FORGEJO_ADMIN_USERNAME' já existe"
-      else
-        forgejo admin user create \
-          --username "$$FORGEJO_ADMIN_USERNAME" \
-          --password "$$FORGEJO_ADMIN_PASSWORD" \
-          --email    "$$FORGEJO_ADMIN_EMAIL" \
-          --admin --must-change-password=false
-        echo "✓ admin '$$FORGEJO_ADMIN_USERNAME' criado"
-      fi
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        if forgejo admin user list 2>/dev/null | awk 'NR>1 {print $$2}' | grep -qx "$$FORGEJO_ADMIN_USERNAME"; then
+          echo "skip: admin '$$FORGEJO_ADMIN_USERNAME' já existe"
+        else
+          forgejo admin user create \
+            --username "$$FORGEJO_ADMIN_USERNAME" \
+            --password "$$FORGEJO_ADMIN_PASSWORD" \
+            --email    "$$FORGEJO_ADMIN_EMAIL" \
+            --admin --must-change-password=false
+          echo "✓ admin '$$FORGEJO_ADMIN_USERNAME' criado"
+        fi
 
 volumes:
   h-forgejo-data:
