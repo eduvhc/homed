@@ -131,6 +131,47 @@ services:
           echo "✓ admin '$$FORGEJO_ADMIN_USERNAME' criado"
         fi
 
+  # ─── one-shot: regista Authelia como OAuth2 OIDC auth source ───
+  # Sem isto a página de login não mostra "Sign in with authelia". O Forgejo
+  # só anuncia botões SSO para auth sources presentes em `forgejo admin auth list`
+  # (auth_model.OAuth2). A config de `[oauth2_client]` em app.ini só ajusta
+  # comportamento (auto-registration, account-linking) — não cria providers.
+  # Source: cmd/admin_auth_oauth.go:217 (`addOauth` cria auth_model.Source).
+  forgejo-oidc-bootstrap:
+    image: *forgejo-image
+    container_name: forgejo-oidc-bootstrap
+    restart: "no"
+    depends_on:
+      forgejo-admin-bootstrap: { condition: service_completed_successfully }
+    env_file:
+      - ../../../../secrets/h-forgejo.env       # OIDC_FORGEJO_CLIENT_SECRET
+    environment:
+      <<: *forgejo-db-env
+      FORGEJO__security__INSTALL_LOCK: "true"
+      OIDC_SOURCE_NAME: authelia
+      OIDC_CLIENT_ID: forgejo
+      OIDC_DISCOVERY_URL: https://auth.iedora.com/.well-known/openid-configuration
+    volumes: *forgejo-volumes
+    networks: [internal]
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        if forgejo admin auth list 2>/dev/null | awk 'NR>1 {print $$2}' | grep -qx "$$OIDC_SOURCE_NAME"; then
+          echo "skip: OIDC source '$$OIDC_SOURCE_NAME' já existe"
+        else
+          forgejo admin auth add-oauth \
+            --name "$$OIDC_SOURCE_NAME" \
+            --provider openidConnect \
+            --key "$$OIDC_CLIENT_ID" \
+            --secret "$$OIDC_FORGEJO_CLIENT_SECRET" \
+            --auto-discover-url "$$OIDC_DISCOVERY_URL" \
+            --scopes openid --scopes email --scopes profile --scopes groups \
+            --group-claim-name groups
+          echo "✓ OIDC source '$$OIDC_SOURCE_NAME' registado"
+        fi
+
 volumes:
   h-forgejo-data:
 
