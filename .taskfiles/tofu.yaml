@@ -57,6 +57,8 @@ tasks:
       bws run --project-id "$HOMED_BWS_PROJECT_ID" -- sh -c '
         : "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN não está no projecto bws}"
         : "${HOMED_TOFU_ENCRYPTION:?HOMED_TOFU_ENCRYPTION não está no projecto bws}"
+        : "${R2_STATE_ACCESS_KEY:?R2_STATE_ACCESS_KEY não está no projecto bws}"
+        : "${R2_STATE_SECRET_KEY:?R2_STATE_SECRET_KEY não está no projecto bws}"
         export TF_VAR_cf_api_token="$CLOUDFLARE_API_TOKEN"
         TF_VAR_cf_account_id=$(curl -sfH "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
           https://api.cloudflare.com/client/v4/accounts | jq -r ".result[0].id")
@@ -64,5 +66,23 @@ tasks:
           "https://api.cloudflare.com/client/v4/zones?name=iedora.com" | jq -r ".result[0].id")
         export TF_VAR_cf_account_id TF_VAR_cf_zone_id
         export TF_VAR_encryption_passphrase="$HOMED_TOFU_ENCRYPTION"
-        cd tofu && tofu {{.TF_CMD}}
+        # Backend S3 (R2): credentials via env vars standard
+        export AWS_ACCESS_KEY_ID="$R2_STATE_ACCESS_KEY"
+        export AWS_SECRET_ACCESS_KEY="$R2_STATE_SECRET_KEY"
+        cd tofu
+        # Endpoint dinâmico via backend-config file (forma documentada para
+        # valor nested em HCL — flag form -backend-config=KEY=VAL não aceita HCL).
+        BACKEND_FILE=$(mktemp)
+        trap "rm -f $BACKEND_FILE" EXIT
+        printf "endpoints = { s3 = \"https://%s.r2.cloudflarestorage.com\" }\n" \
+          "$TF_VAR_cf_account_id" > "$BACKEND_FILE"
+        # Se TF_CMD começa por "init" o user controla flags (ex.: init -migrate-state
+        # na 1ª transição local→R2). Senão init silencioso só se .terraform/ não existir.
+        case "{{.TF_CMD}}" in
+          init*) tofu {{.TF_CMD}} -backend-config="$BACKEND_FILE" ;;
+          *)
+            [ -d .terraform ] || tofu init -backend-config="$BACKEND_FILE" >/dev/null
+            tofu {{.TF_CMD}}
+            ;;
+        esac
       '

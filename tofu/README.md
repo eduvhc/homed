@@ -10,13 +10,13 @@ no topo do `ls`. Ficheiros de **recursos cloud** ficam por baixo, um por concern
 ```
 tofu/
 ├── _providers.tf            # providers + version pinning
-├── _encryption.tf           # state encryption nativo Tofu 1.10+
+├── _encryption.tf           # client-side state encryption (AES-GCM, pré-upload)
+├── _backend.tf              # remote state em R2 (lockfile nativo via conditional writes)
 ├── _variables.tf            # inputs (CF creds, IDs, defaults)
 ├── _outputs.tf              # outputs (sensitive: tunnel_token, r2_endpoint)
 ├── dns.tf                   # CNAME records *.iedora.com → tunnel
 ├── tunnel.tf                # Zero Trust Tunnel + token data source
 ├── r2.tf                    # bucket + lifecycle (180d fallback expiry)
-├── .gitignore               # exclui .terraform/ e crash logs
 └── README.md                # este ficheiro
 ```
 
@@ -83,6 +83,7 @@ task tofu:sync-secrets        # exporta tunnel_token para secrets/h-cloudflared.
 - `CLOUDFLARE_API_TOKEN` — adicionado por ti
 - `HOMED_TOFU_ENCRYPTION` — passphrase para state encryption (gerar com `openssl rand -hex 32`)
 - `HOMED_AGE_KEY` — chave privada age usada por sops (ver `.taskfiles/secrets.yaml`)
+- `R2_STATE_ACCESS_KEY` + `R2_STATE_SECRET_KEY` — R2 API tokens com Object Read & Write em `homed-backups` (para backend remoto do state; ver migration steps abaixo)
 
 **O que vem da CF API em runtime (não persistido):**
 - `cf_account_id` (descoberto de `/accounts`)
@@ -91,6 +92,38 @@ task tofu:sync-secrets        # exporta tunnel_token para secrets/h-cloudflared.
 Beelink não corre `tofu` nem precisa de bws — apply roda no operador, e o
 `tunnel_token` chega ao servidor via `secrets/h-cloudflared.env` (encriptado
 in-place por `task tofu:sync-secrets`).
+
+## Remote state em R2 (migration one-time)
+
+State vive em `homed-backups` bucket, prefix `tofu/homed.tfstate`. Encriptado
+client-side (AES-GCM via `_encryption.tf`) **antes** do upload — R2 vê só
+ciphertext. Lock nativo via S3 conditional writes (OpenTofu 1.10+,
+`use_lockfile = true` em `_backend.tf`). Sem DynamoDB.
+
+**Migration steps** (correr 1× quando o backend mudar de local para R2):
+
+```bash
+# 1. Criar R2 API tokens dedicados ao state em CF dashboard:
+#    R2 → Manage R2 API Tokens → Create → Permissions: Object Read & Write
+#    Bucket: homed-backups
+#    Guardar Access Key ID + Secret Access Key.
+
+# 2. Adicionar ao projecto bws:
+bws secret create R2_STATE_ACCESS_KEY <access-key-id> "$HOMED_BWS_PROJECT_ID"
+bws secret create R2_STATE_SECRET_KEY <secret-access-key> "$HOMED_BWS_PROJECT_ID"
+
+# 3. Migrar state local → R2:
+task tofu CMD=init           # detecta novo backend, oferece migrate-state — yes
+#   (wrapper passa -reconfigure + endpoints dinâmico via bws account_id)
+
+# 4. Confirmar:
+task tofu CMD='state list' | head -3    # lista resources como antes — agora vindo de R2
+```
+
+**Cold-start (laptop novo)**: bws + mise instalados (ver README raiz),
+clone do repo, exportar `BWS_ACCESS_TOKEN`+`HOMED_BWS_PROJECT_ID`. `task tofu CMD=init`
+reconstitui `.terraform/` local a partir do state R2. Zero ficheiros locais
+pré-existentes — laptop é descartável.
 
 ## Boundary com o resto
 
