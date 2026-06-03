@@ -129,7 +129,9 @@ identity_providers:
           - 'https://forge.iedora.com/user/oauth2/authelia/callback'
         scopes: [openid, profile, email, groups]
         userinfo_signed_response_alg: 'RS256'   # signed JWT (mais seguro que 'none')
-        token_endpoint_auth_method: 'client_secret_basic'
+        # Forgejo 15 envia credenciais no body (client_secret_post), não no header.
+        # Ambos os métodos são equivalentes em segurança sob HTTPS — alinhar com o cliente.
+        token_endpoint_auth_method: 'client_secret_post'
 
       - client_id: 'gatus'
         client_name: 'Gatus · iedora'

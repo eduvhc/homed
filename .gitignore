@@ -47,3 +47,6 @@ data/
 
 # go-task cache (sources: digest dir)
 .task/
+
+# Claude Code per-user settings (personal permission grants)
+.claude/settings.local.json

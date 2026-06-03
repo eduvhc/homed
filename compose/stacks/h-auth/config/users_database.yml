@@ -3,7 +3,7 @@
 # Hash gerado com: `docker run --rm authelia/authelia:4.39.13 authelia crypto hash generate argon2 --password '<PASSWORD>'`
 
 users:
-  edu:
+  eduvhc:
     disabled: false
     displayname: 'Eduardo'
     password: '$argon2id$v=19$m=65536,t=3,p=4$9teRfKB4d+DeutWhnZH7EQ$sDspaw8LGT//3sULTmsy3tPKvmwvhqRpVyiqyxOpEvA'

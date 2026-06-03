@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(task:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker exec:*)",
+      "Bash(rg:*)",
+      "Bash(fd:*)",
+      "Bash(wc:*)",
+      "Bash(ls:*)",
+      "Bash(eza:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)"
+    ]
+  }
+}
