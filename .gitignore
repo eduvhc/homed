@@ -44,3 +44,6 @@ data/
 # Sistema
 .DS_Store
 *.swp
+
+# go-task cache (sources: digest dir)
+.task/
