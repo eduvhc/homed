@@ -1,0 +1,19 @@
+version: '3'
+
+# SRP: restic ops via h-restic container. Para subcommands triviais usa o
+# passthrough (`task restic -- snapshots`). Verbos próprios só para fluxos
+# que NÃO são `restic <cmd>` puros (hooks do entrypoint, restore ergonomic).
+
+tasks:
+  default:
+    desc: 'Restic CLI passthrough (uso: task restic -- snapshots / -- check)'
+    cmd: $COMPOSE exec h-restic restic {{.CLI_ARGS}}
+
+  snapshot:
+    desc: Snapshot manual NOW (chama entrypoint.sh para hooks pre/post)
+    cmd: $COMPOSE exec h-restic /usr/local/bin/entrypoint.sh backup
+
+  restore:
+    desc: 'Restore (uso: task restic:restore SNAP=latest TARGET=/tmp/restore)'
+    requires: { vars: [SNAP, TARGET] }
+    cmd: $COMPOSE exec h-restic restic restore {{.SNAP}} --target {{.TARGET}}

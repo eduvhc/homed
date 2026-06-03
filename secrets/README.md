@@ -13,11 +13,11 @@ Fonte única de secrets do homed. Cada ficheiro `<service>.env` é encriptado **
 ## Operação
 
 ```bash
-task up                 # decifra in-place todos os secrets/*.env (600) e arranca o stack
-task decrypt            # só decifra (idempotente — ignora os já em plaintext)
-task lock               # re-encripta in-place (correr antes de commit)
-task edit NAME=h-auth   # editar em-place (sops abre $EDITOR, re-encripta on save)
-task rotate             # re-encriptar tudo com a lista de recipients atual de .sops.yaml
+task up                          # decifra todos secrets/*.env (600) e arranca o stack
+task secrets:decrypt             # só decifra (idempotente — ignora os já em plaintext)
+task secrets:lock                # encripta in-place (correr antes de commit; cobre novos)
+task secrets:edit NAME=h-auth    # editar em-place (sops abre $EDITOR, re-encripta on save)
+task secrets:rotate              # re-encriptar tudo com a lista de recipients atual de .sops.yaml
 ```
 
 ## Adicionar um secret novo
@@ -28,9 +28,9 @@ cat > secrets/h-foo.env <<EOF
 FOO_TOKEN=...
 EOF
 
-# 2. encriptar in-place (mesmo nome de ficheiro, agora encriptado)
-task encrypt NAME=h-foo
-#   internamente: sops -e -i --input-type dotenv --output-type dotenv secrets/h-foo.env
+# 2. encriptar in-place (todos os plaintexts, incluindo o novo)
+task secrets:lock
+#   internamente: sops -e -i para cada secrets/*.env em plaintext
 
 # 3. referenciar no compose do serviço (3 ups, post-flatten)
 #    env_file: ../../../secrets/h-foo.env

@@ -1,233 +1,74 @@
 version: '3'
 
+# Root Taskfile. SRP via includes: cada módulo trata um domínio.
+# Verbos diários ficam aqui; ops específicas estão em .taskfiles/<module>.yaml.
+#
+# Listar tudo: `task --list-all` (inclui módulos prefixados com `<mod>:`)
+
 vars:
   COMPOSE: docker compose -f compose/compose.yaml
-  SOPS_AGE_KEY_FILE: '{{.HOME}}/.config/sops/age/keys.txt'
 
 env:
-  SOPS_AGE_KEY_FILE: '{{.SOPS_AGE_KEY_FILE}}'
+  # Propagados a todos os subprocessos (incluindo módulos via includes:).
+  SOPS_AGE_KEY_FILE: '{{.HOME}}/.config/sops/age/keys.txt'
+  COMPOSE: '{{.COMPOSE}}'
+
+includes:
+  secrets: .taskfiles/secrets.yaml
+  build:   .taskfiles/build.yaml
+  restic:  .taskfiles/restic.yaml
+  tofu:    .taskfiles/tofu.yaml
 
 tasks:
   default:
-    desc: Mostra tasks disponíveis
-    cmds:
-      - task --list
-
-  networks:
-    desc: Cria as networks Docker partilhadas (idempotente)
-    cmds:
-      - for n in edge internal dns; do docker network ls --format '{{`{{.Name}}`}}' | grep -q "^$n$" || docker network create "$n"; done
+    desc: Lista todas as tasks (módulos prefixados)
     silent: true
+    cmd: task --list-all
 
+  # ─────────────────────────────  lifecycle  ─────────────────────────────────
   up:
-    desc: Decifra secrets e arranca o stack (sem profile bootstrap)
-    deps: [decrypt, networks, build-h-yt-dlp, build-h-restic]
-    cmd: "{{.COMPOSE}} up -d"
-
-  up-bootstrap:
     desc: |
-      Bootstrap completo de máquina nova num só comando:
-      decrypt → networks → builds custom → compose up --profile bootstrap.
-      Pré-req: ~/.config/sops/age/keys.txt e repo já pushed para forge.iedora.com.
+      Arranca o stack. PROFILE=bootstrap na 1ª boot ou re-seed.
+      Auto: secrets:decrypt + builds custom + docker networks idempotentes.
     deps:
-      - decrypt
-      - networks
-      - build-bootstrap-db
-      - build-forgejo-bootstrap
-    cmd: COMPOSE_PROFILES=bootstrap {{.COMPOSE}} up -d --wait
-
-  validate:
-    desc: Valida a árvore de composes (sem subir nada — pode correr a frio)
-    cmd: "{{.COMPOSE}} --profile bootstrap config -q"
-    silent: true
-
-  build-forgejo-bootstrap:
-    desc: Build local da imagem forgejo-bootstrap (multiplex admin/oidc/config)
-    sources:
-      - compose/stacks/h-forgejo/bootstrap/**/*
-    cmd: docker build -t forgejo-bootstrap:2.0.0 compose/stacks/h-forgejo/bootstrap
-
-  build-h-yt-dlp:
-    desc: Build local da image homed/h-yt-dlp:2.0.0 (re-correr quando Dockerfile muda)
-    sources:
-      - compose/stacks/h-yt-dlp/Dockerfile
-      - compose/stacks/h-yt-dlp/scripts/**/*
-    cmd: docker build -t homed/h-yt-dlp:2.0.0 compose/stacks/h-yt-dlp
-
-  build-h-restic:
-    desc: Build local da image homed/h-restic:1.0.0 (restic + supercronic)
-    sources:
-      - compose/stacks/h-restic/bootstrap/**/*
-    cmd: docker build -t homed/h-restic:1.0.0 compose/stacks/h-restic/bootstrap
+      - secrets:decrypt
+      - build:forgejo-bootstrap
+      - build:h-yt-dlp
+      - build:h-restic
+      - build:bootstrap-db
+    cmds:
+      - for: ['edge', 'internal', 'dns']
+        cmd: docker network inspect {{.ITEM}} >/dev/null 2>&1 || docker network create {{.ITEM}}
+      - COMPOSE_PROFILES={{.PROFILE | default ""}} {{.COMPOSE}} up -d {{.WAIT_FLAG}}
+    vars:
+      WAIT_FLAG: '{{if .PROFILE}}--wait{{end}}'
 
   down:
-    desc: Pára o stack (decrypted .env files ficam no disco)
-    cmds:
-      - "{{.COMPOSE}} down"
-
-  bootstrap-age-key:
-    desc: |
-      Operator-side. Fetch da age key (HOMED_AGE_KEY) de bws para
-      ~/.config/sops/age/keys.txt. Idempotente — skip se ficheiro existe.
-      Pré-req: bws + BWS_ACCESS_TOKEN + HOMED_BWS_PROJECT_ID.
-    cmd: ./scripts/bootstrap-age-key.sh
-
-  decrypt:
-    desc: Decifra in-place secrets/*.env (idempotente — só decifra os encriptados)
-    cmd: |
-      for f in secrets/*.env; do
-        if grep -qE 'sops[:_]' "$f"; then
-          sops -d -i --input-type dotenv --output-type dotenv "$f"
-          chmod 600 "$f"
-        fi
-      done
-      true
-    silent: true
-
-  lock:
-    desc: Re-encripta in-place secrets/*.env (correr antes de commit)
-    cmd: |
-      for f in secrets/*.env; do
-        if ! grep -qE 'sops[:_]' "$f"; then
-          sops -e -i --input-type dotenv --output-type dotenv "$f"
-        fi
-        chmod 600 "$f"
-      done
-      true
-    silent: true
-
-  edit:
-    desc: 'Editar um secret (uso: task edit NAME=h-auth) — sops abre, edita, re-encripta'
-    requires:
-      vars: [NAME]
-    cmds:
-      - sops --input-type dotenv --output-type dotenv secrets/{{.NAME}}.env
-
-  build-bootstrap-db:
-    desc: Build local h-bootstrap-db image (re-correr sempre que run.sh muda)
-    sources:
-      - compose/stacks/h-bootstrap-db/Dockerfile
-      - compose/stacks/h-bootstrap-db/run.sh
-    cmds:
-      - docker build -t h-bootstrap-db:1.0.0 compose/stacks/h-bootstrap-db
-
-  deploy-logs:
-    desc: Tail dos logs do agente doco-cd
-    cmds:
-      - docker logs -f --tail 200 h-doco-cd
-
-  migrate:
-    desc: 'Re-correr migrations de uma app (uso: task migrate APP=imopush)'
-    requires:
-      vars: [APP]
-    deps: [decrypt]
-    cmds:
-      - "{{.COMPOSE}} up --exit-code-from {{.APP}}-db-migrate {{.APP}}-db-bootstrap {{.APP}}-db-migrate"
-
-  encrypt:
-    desc: 'Encriptar in-place um secret novo (uso: task encrypt NAME=h-foo)'
-    requires:
-      vars: [NAME]
-    cmds:
-      - test -f secrets/{{.NAME}}.env
-      - sops -e -i --input-type dotenv --output-type dotenv secrets/{{.NAME}}.env
-      - chmod 600 secrets/{{.NAME}}.env
-      - echo "✓ secrets/{{.NAME}}.env encriptado in-place (mode 600)"
-
-  rotate:
-    desc: Re-encripta todos os secrets com a lista atual de recipients em .sops.yaml
-    cmd: |
-      for f in secrets/*.env; do
-        if grep -qE 'sops[:_]' "$f"; then
-          sops updatekeys -y "$f"
-        fi
-      done
-    silent: true
+    desc: Pára o stack (decryptos ficam no disco)
+    cmd: '{{.COMPOSE}} down'
 
   ps:
     desc: Estado dos containers
-    cmds:
-      - "{{.COMPOSE}} ps"
+    cmd: '{{.COMPOSE}} ps'
 
   logs:
-    desc: 'Tail logs de um serviço (uso: task logs NAME=h-auth)'
-    requires:
-      vars: [NAME]
-    cmds:
-      - "{{.COMPOSE}} logs -f --tail=100 {{.NAME}}"
+    desc: 'Tail logs (uso: task logs NAME=h-auth)'
+    requires: { vars: [NAME] }
+    cmd: '{{.COMPOSE}} logs -f --tail=100 {{.NAME}}'
 
-  restic:
-    desc: 'Restic CLI ad-hoc (uso: task restic -- snapshots / -- ls latest)'
-    cmds:
-      - "{{.COMPOSE}} exec h-restic restic {{.CLI_ARGS}}"
+  validate:
+    desc: Valida a árvore de composes (sem subir nada)
+    silent: true
+    cmd: '{{.COMPOSE}} --profile bootstrap config -q'
 
-  restic-init:
-    desc: 'Inicializa o repositório Restic (idempotente; entrypoint já faz na 1ª boot)'
-    cmds:
-      - "{{.COMPOSE}} exec h-restic restic init || echo 'Já inicializado (esperado em re-runs)'"
-
-  restic-snapshot:
-    desc: 'Snapshot manual agora (ignora cron)'
-    cmds:
-      - "{{.COMPOSE}} exec h-restic /usr/local/bin/entrypoint.sh backup"
-
-  restic-snapshots:
-    desc: 'Listar snapshots existentes'
-    cmds:
-      - "{{.COMPOSE}} exec h-restic restic snapshots --compact"
-
-  restic-check:
-    desc: 'Integridade do repositório (rápido)'
-    cmds:
-      - "{{.COMPOSE}} exec h-restic restic check"
-
-  restic-restore:
-    desc: 'Restore (uso: task restic-restore SNAP=latest TARGET=/tmp/restore)'
-    requires: { vars: [SNAP, TARGET] }
-    cmds:
-      - "{{.COMPOSE}} exec h-restic restic restore {{.SNAP}} --target {{.TARGET}}"
-
-  restic-stats:
-    desc: 'Estatísticas: tamanho, blobs, deduplicação'
-    cmds:
-      - "{{.COMPOSE}} exec h-restic restic stats --mode raw-data"
-
-  _tofu:
-    desc: |
-      Internal — tofu wrapper cross-OS via scripts/tofu-wrapper.sh.
-      Lê CLOUDFLARE_API_TOKEN e HOMED_TOFU_ENCRYPTION do Bitwarden
-      Secrets Manager. Pré-req: bws + BWS_ACCESS_TOKEN + HOMED_BWS_PROJECT_ID.
-    requires: { vars: [CMD] }
-    cmd: ./scripts/tofu-wrapper.sh {{.CMD}}
-
-  tofu-init:
-    desc: 'Inicializa providers do Tofu'
-    cmds: [{ task: _tofu, vars: { CMD: 'init' } }]
-
-  tofu-plan:
-    desc: 'Tofu plan (state encriptado)'
-    cmds: [{ task: _tofu, vars: { CMD: 'plan' } }]
-
-  tofu-apply:
-    desc: 'Tofu apply (state encriptado). Lê tfvars de sops.'
-    cmds: [{ task: _tofu, vars: { CMD: 'apply -auto-approve' } }]
-
-  tofu-sync-secrets:
-    desc: 'Lê tunnel_token do tofu, escreve secrets/h-cloudflared.env encriptado (sem plaintext em disco entre passos)'
-    cmd: |
-      set -eu
-      tmp=$(mktemp)
-      trap 'rm -f "$tmp"' EXIT
-      echo "TUNNEL_TOKEN=$(./scripts/tofu-wrapper.sh output -raw tunnel_token)" > "$tmp"
-      sops -e --input-type dotenv --output-type dotenv "$tmp" > secrets/h-cloudflared.env
-
+  # ─────────────────────────────  bootstrap  ─────────────────────────────────
   provision:
-    desc: 'Bootstrap declarativo da máquina (Debian 12). Idempotente.'
-    cmds:
-      - ansible-playbook -i ansible/inventory.yml -l {{.HOST | default "localhost"}} ansible/provision.yml --ask-become-pass
+    desc: 'Bootstrap declarativo da máquina (uso: task provision HOST=beelink)'
+    cmd: ansible-playbook -i ansible/inventory.yml -l {{.HOST | default "localhost"}} ansible/provision.yml --ask-become-pass
 
-  provision-check:
-    desc: 'Dry-run do provision (mostra o que mudaria sem aplicar)'
-    cmds:
-      - ansible-playbook -i ansible/inventory.yml -l {{.HOST | default "localhost"}} ansible/provision.yml --check --diff
-
+  # ───────────────────────────────  db  ──────────────────────────────────────
+  migrate:
+    desc: 'DB migrations dum app (uso: task migrate APP=imopush)'
+    requires: { vars: [APP] }
+    deps: [secrets:decrypt]
+    cmd: '{{.COMPOSE}} up --exit-code-from {{.APP}}-db-migrate {{.APP}}-db-bootstrap {{.APP}}-db-migrate'

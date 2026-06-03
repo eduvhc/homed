@@ -13,7 +13,8 @@ compose/
                           init.yaml / backups.yaml / compose.bootstrap.yaml]
 secrets/                  *.env encriptados in-place com sops+age
 ansible/                  provision.yml (bootstrap declarativo da máquina)
-Taskfile.yaml             Entry points: task up, task decrypt, task tofu-apply
+Taskfile.yaml             Root tasks (lifecycle); módulos em .taskfiles/
+.taskfiles/               secrets|build|restic|tofu — SRP por domínio
 .sops.yaml                Regras de encriptação sops+age
 docs/
   compose-standard.md     Padrão obrigatório dos composes (layout + regras)
@@ -52,19 +53,19 @@ mise install                           # sops, age, task, opentofu, bws, jq (~30
 #    (justificação: ansible push-only, evita pipx/Python no .mise.toml)
 
 # 4. Age key + provision do servidor
-task bootstrap-age-key                 # bws → ~/.config/sops/age/keys.txt (operator)
+task secrets:bootstrap-age-key         # bws → ~/.config/sops/age/keys.txt (operator)
 task provision HOST=beelink            # ansible: docker, mise + tools, tailscale, copy age key
-task tofu-apply                        # CF tunnel/DNS/R2 (state encriptado, vars de bws)
+task tofu CMD=apply                    # CF tunnel/DNS/R2 (state encriptado, vars de bws)
 
 # 5. Servidor: arranca o stack (SSH ao Beelink)
 ssh beelink
-cd ~/homed && task up-bootstrap        # decrypt + build images + compose --profile bootstrap
+cd ~/homed && task up PROFILE=bootstrap    # decrypt + build + compose --profile bootstrap
 ```
 
 Beelink nunca toca em bws — a age key chega-lhe via `ansible.builtin.copy`.
 Versões das CLIs no Beelink vêm de `mise install` corrido pelo provision.
-`task up-bootstrap` corre o profile `bootstrap` (PAT/webhook do Forgejo,
-seed do doco-cd, init do Postgres). Em re-runs do dia-a-dia usa `task up`.
+`task up PROFILE=bootstrap` corre o profile `bootstrap` (PAT/webhook do
+Forgejo, seed do doco-cd, init do Postgres). Em re-runs diários usa `task up`.
 
 ## Operação diária
 
@@ -83,11 +84,10 @@ task logs NAME=h-auth                                              # tail logs
 paralelos). Workflow:
 
 ```bash
-task decrypt                           # decifra todos in-place (idempotente)
-task edit NAME=h-auth                  # sops abre, edita, re-encripta
-task encrypt NAME=h-foo                # encriptar secret novo pela 1ª vez
-task lock                              # re-encripta tudo (correr antes de commit)
-task rotate                            # re-encripta com a lista atual de recipients
+task secrets:decrypt                   # decifra todos in-place (idempotente)
+task secrets:edit NAME=h-auth          # sops abre, edita, re-encripta
+task secrets:lock                      # encripta tudo (correr antes de commit, cobre novos)
+task secrets:rotate                    # re-encripta com lista atual de recipients
 ```
 
 `.sops.yaml` define as recipient keys (YubiKey + age offline backup).
@@ -121,8 +121,8 @@ Imagens custom (build local, pinned):
 - `homed/h-yt-dlp:2.0.0` — yt-dlp + ffmpeg sobre `python:3.14-alpine`
 - `h-bootstrap-db:1.0.0` — init helper para Postgres (criar DB/role por app)
 
-Targets: `task build-forgejo-bootstrap`, `task build-h-yt-dlp`,
-`task build-bootstrap-db`. Re-correm automaticamente quando os sources
+Targets: `task build:forgejo-bootstrap`, `task build:h-yt-dlp`,
+`task build:bootstrap-db`. Re-correm automaticamente quando os sources
 mudam (Taskfile `sources:`).
 
 ## Adicionar um serviço
@@ -133,7 +133,7 @@ mudam (Taskfile `sources:`).
    - `init.yaml` — one-shots (`service_completed_successfully`)
    - `backups.yaml` — backup-prep (DB dump, export estruturado)
    - `compose.bootstrap.yaml` — opt-in via `profile=bootstrap`
-2. Se tem secrets: `secrets/h-<nome>.env` + `task encrypt NAME=h-<nome>`.
+2. Se tem secrets: cria `secrets/h-<nome>.env` em plaintext + `task secrets:lock` (encripta todos os plaintexts, incluindo o novo).
 3. Adiciona a linha em `compose/compose.yaml` no bloco `include:`.
 4. `task validate` (sanity check a frio) → `task up` (ou
    `docker compose -f compose/compose.yaml up -d h-<nome>` para só um).
@@ -145,23 +145,21 @@ file-scoped, shell ≤10 linhas) em
 ## Tofu (Cloudflare + R2)
 
 ```bash
-task tofu-init                         # inicializa providers
-task tofu-plan                         # plan
-task tofu-apply                        # apply (state encriptado)
-task tofu-sync-secrets                 # output tunnel_token → secrets/h-cloudflared.env encriptado
+task tofu CMD=init                     # inicializa providers
+task tofu CMD=plan                     # plan
+task tofu CMD=apply                    # apply (state encriptado)
+task tofu:sync-secrets                 # output tunnel_token → secrets/h-cloudflared.env encriptado
 ```
 
 State encriptado com `HOMED_TOFU_ENCRYPTION` lido do Bitwarden Secrets
-Manager (via `scripts/tofu-wrapper.sh`).
+Manager (logic em `.taskfiles/tofu.yaml`).
 
 ## Restic (backups → R2)
 
 ```bash
-task restic-init                       # 1ª vez por destino
-task restic-snapshot                   # snapshot manual agora
-task restic-snapshots                  # listar snapshots
-task restic-check                      # integridade do repo
-task restic-stats                      # tamanho/dedup
-task restic-restore SNAP=latest TARGET=/tmp/restore
-task restic -- <cli args>              # passthrough ad-hoc
+task restic:snapshot                   # snapshot manual agora (com hooks pre/post)
+task restic:restore SNAP=latest TARGET=/tmp/restore
+task restic -- snapshots --compact     # CLI passthrough — listar
+task restic -- check                   # CLI passthrough — integridade
+task restic -- stats --mode raw-data   # CLI passthrough — tamanho/dedup
 ```

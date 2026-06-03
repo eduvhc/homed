@@ -1115,7 +1115,7 @@
           <code>h-doco-cd</code> lê-os via <code>*_FILE</code> envs.
           Padrão consistente com o standard (≤10L shell inline; multi-step → custom image).
           <code>SOPS_AGE_KEY</code> entra como Docker secret bind do <code>~/.config/sops/age/keys.txt</code>.
-          Resultado: <code>task up-bootstrap</code> é o único comando humano.
+          Resultado: <code>task up PROFILE=bootstrap</code> é o único comando humano.
         </p>
         <svg viewBox="0 0 760 160" class="mini-svg">
           <defs>
@@ -1303,7 +1303,7 @@
         <p class="dec-why">
           <b>Single Responsibility:</b> secrets não fazem parte da definição de um serviço —
           são injectados em runtime. Manter num só sítio dá: rotação fácil
-          (um <code>task rotate</code>), auditoria simples (<code>ls secrets/</code>),
+          (um <code>task secrets:rotate</code>), auditoria simples (<code>ls secrets/</code>),
           backup óbvio. Custo: paths feios <code>../../../secrets/</code> nos fragments (3-up: <code>stacks/&lt;svc&gt;/file.yaml</code> → root).
           Vale a pena.
         </p>
@@ -2017,7 +2017,7 @@
       <div class="box">
         <div class="marker">iac</div>
         <div class="name">tofu/</div>
-        <div class="role">7 ficheiros. State encriptado in-place (PBKDF2 + AES-GCM). CLI wrapper em <code>scripts/tofu-wrapper.sh</code> (POSIX sh, cross-OS).</div>
+        <div class="role">7 ficheiros. State encriptado in-place (PBKDF2 + AES-GCM). CLI wrapper em <code>.taskfiles/tofu.yaml</code> (bws-injected, cross-OS).</div>
         <div class="pins">dns · tunnel · r2 · providers · encryption</div>
       </div>
       <div class="box wide">

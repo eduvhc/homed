@@ -46,7 +46,7 @@ Cria no dashboard:
    RESTIC_REPOSITORY=<output tofu r2_endpoint>
    HC_PING_URL=https://hc-ping.com/<uuid de healthchecks.io>
    EOF
-   task encrypt NAME=h-restic
+   task secrets:lock
    ```
 
 ## Setup inicial (macOS / Linux / Windows — cross-OS)
@@ -73,16 +73,16 @@ export BWS_ACCESS_TOKEN=<machine-account-token>
 export HOMED_BWS_PROJECT_ID=<project-uuid>
 
 # 4. Operação
-task tofu-init                # primeira vez (descarrega providers)
-task tofu-plan                # mostra mudanças propostas
-task tofu-apply               # aplica
-task tofu-sync-secrets        # exporta tunnel_token para secrets/h-cloudflared.env (encriptado in-place)
+task tofu CMD=init            # primeira vez (descarrega providers)
+task tofu CMD=plan            # mostra mudanças propostas
+task tofu CMD=apply           # aplica
+task tofu:sync-secrets        # exporta tunnel_token para secrets/h-cloudflared.env (encriptado in-place)
 ```
 
 **O que está no projecto bws** (operador, qualquer OS):
 - `CLOUDFLARE_API_TOKEN` — adicionado por ti
 - `HOMED_TOFU_ENCRYPTION` — passphrase para state encryption (gerar com `openssl rand -hex 32`)
-- `HOMED_AGE_KEY` — chave privada age usada por sops (ver `scripts/bootstrap-age-key.sh`)
+- `HOMED_AGE_KEY` — chave privada age usada por sops (ver `.taskfiles/secrets.yaml`)
 
 **O que vem da CF API em runtime (não persistido):**
 - `cf_account_id` (descoberto de `/accounts`)
@@ -90,7 +90,7 @@ task tofu-sync-secrets        # exporta tunnel_token para secrets/h-cloudflared.
 
 Beelink não corre `tofu` nem precisa de bws — apply roda no operador, e o
 `tunnel_token` chega ao servidor via `secrets/h-cloudflared.env` (encriptado
-in-place por `task tofu-sync-secrets`).
+in-place por `task tofu:sync-secrets`).
 
 ## Boundary com o resto
 

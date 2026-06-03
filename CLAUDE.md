@@ -22,7 +22,7 @@ Root `compose/compose.yaml` agrega via `include:`.
 ## Secrets
 
 SOPS in-place em `secrets/*.env` (sops 3.12, age recipient em `.sops.yaml`).
-**Nunca editar encrypted files directly** — usar `task decrypt|lock|edit|encrypt|rotate`.
+**Nunca editar encrypted files directly** — usar `task secrets:{decrypt,lock,edit,rotate}`.
 
 ## Validação obrigatória
 

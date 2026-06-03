@@ -238,7 +238,7 @@ ou tasks com `CONFIRM=yes`-style one-off são proibidos *até prova em contrári
 
 ### Idempotência: cada task / step pode correr N vezes com mesmo resultado
 
-- Bom: `task up-bootstrap` cria role+DB se não existem, cria admin se não existe, etc.
+- Bom: `task up PROFILE=bootstrap` cria role+DB se não existem, cria admin se não existe, etc.
 - Mau: `task forgejo-reset CONFIRM=yes` (destrói state — uma vez só, irreversível)
 
 Tasks "reset" / "wipe" / "drop" são quase sempre o sinal de que a migração

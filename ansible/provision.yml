@@ -192,7 +192,7 @@
         mode: '0700'
 
     # Age key chega ao servidor via copy do operador (que já a tem em local,
-    # vinda de bws via `task bootstrap-age-key`). O servidor nunca toca em bws.
+    # vinda de bws via `task secrets:bootstrap-age-key`). O servidor nunca toca em bws.
     # Idempotente: ansible só copia se o conteúdo diferir.
     - name: Age · copy private key do operador para o servidor
       ansible.builtin.copy:

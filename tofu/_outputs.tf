@@ -1,4 +1,4 @@
-# Outputs consumidos por `task tofu-sync-secrets`:
+# Outputs consumidos por `task tofu:sync-secrets`:
 # escreve cada output sensível para o secret correto em ../secrets/
 
 output "tunnel_id" {

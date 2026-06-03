@@ -1,0 +1,44 @@
+version: '3'
+
+# SRP: OpenTofu via bws-injected secrets (zero plaintext em disco).
+# CMD passthrough para qualquer subcommand tofu; sync-secrets distinct
+# porque é tofu output → sops -e pipe.
+#
+# Pré-req: bws + BWS_ACCESS_TOKEN + HOMED_BWS_PROJECT_ID.
+# bws inject: CLOUDFLARE_API_TOKEN + HOMED_TOFU_ENCRYPTION como env vars.
+
+tasks:
+  default:
+    desc: 'Tofu via bws (uso: task tofu CMD=plan / CMD=apply / CMD=init)'
+    requires: { vars: [CMD] }
+    preconditions:
+      - sh: command -v bws
+        msg: "bws CLI não instalado — https://bitwarden.com/help/secrets-manager-cli/"
+      - sh: command -v jq
+        msg: "jq não instalado (apt install jq | brew install jq)"
+      - sh: test -n "$BWS_ACCESS_TOKEN"
+        msg: "export BWS_ACCESS_TOKEN=<machine-account-token>"
+      - sh: test -n "$HOMED_BWS_PROJECT_ID"
+        msg: "export HOMED_BWS_PROJECT_ID=<project-uuid>"
+    cmd: |
+      bws run --project-id "$HOMED_BWS_PROJECT_ID" -- sh -c '
+        : "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN não está no projecto bws}"
+        : "${HOMED_TOFU_ENCRYPTION:?HOMED_TOFU_ENCRYPTION não está no projecto bws}"
+        export TF_VAR_cf_api_token="$CLOUDFLARE_API_TOKEN"
+        TF_VAR_cf_account_id=$(curl -sfH "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+          https://api.cloudflare.com/client/v4/accounts | jq -r ".result[0].id")
+        TF_VAR_cf_zone_id=$(curl -sfH "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+          "https://api.cloudflare.com/client/v4/zones?name=iedora.com" | jq -r ".result[0].id")
+        export TF_VAR_cf_account_id TF_VAR_cf_zone_id
+        export TF_VAR_encryption_passphrase="$HOMED_TOFU_ENCRYPTION"
+        cd tofu && tofu {{.CMD}}
+      '
+
+  sync-secrets:
+    desc: Tunnel_token → secrets/h-cloudflared.env (encriptado, zero plaintext em disco)
+    cmd: |
+      tmp=$(mktemp)
+      trap 'rm -f "$tmp"' EXIT
+      TOKEN=$(task tofu CMD='output -raw tunnel_token' 2>/dev/null | tail -1)
+      echo "TUNNEL_TOKEN=$TOKEN" > "$tmp"
+      sops -e --input-type dotenv --output-type dotenv "$tmp" > secrets/h-cloudflared.env

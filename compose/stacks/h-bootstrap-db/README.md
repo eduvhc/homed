@@ -28,7 +28,7 @@ Substituir `<app>` pelo nome (lowercase, sem hífens; é também o nome do role 
    DATABASE_URL=postgres://<app>:<password>@h-postgres:5432/<app>?sslmode=disable
    # + qualquer env runtime da app (API_KEY, etc.)
    ```
-   Depois: `task encrypt NAME=<app>` (encripta in-place o mesmo `secrets/<app>.env`).
+   Depois: `task secrets:lock` (encripta todos os plaintexts in-place, incluindo o novo).
 
 2. **Criar stack** `compose/stacks/<app>/compose.yaml`:
 
@@ -89,7 +89,7 @@ Substituir `<app>` pelo nome (lowercase, sem hífens; é também o nome do role 
      - stacks/<app>/compose.yaml
    ```
 
-4. **Adicionar subdomínio** em `tofu/dns.tf` (variável `subdomains`), correr `task tofu-apply`.
+4. **Adicionar subdomínio** em `tofu/dns.tf` (variável `subdomains`), correr `task tofu CMD=apply`.
 
 5. **Validar refs**: `rg "<app>" ~/dotfiles/modules/home/references.nix` — se a app é OSS upstream, adicionar.
 
@@ -120,4 +120,4 @@ services:
 
 - **Forward-only.** Não há `task migrate-down` por design. Rollback = nova migration que reverte. Para experimentar em dev, `docker compose run --rm <app>-db-migrate down`.
 - **Idempotência.** Bootstrap re-corre em cada `compose up` — usa guards `NOT EXISTS`. Migrate idem (dbmate vê `schema_migrations`).
-- **Password rotation.** `task edit NAME=<app>` (altera password in-place) → `psql -c "ALTER ROLE <app> WITH PASSWORD '<new>'"`. Bootstrap não rotaciona passwords.
+- **Password rotation.** `task secrets:edit NAME=<app>` (altera password in-place) → `psql -c "ALTER ROLE <app> WITH PASSWORD '<new>'"`. Bootstrap não rotaciona passwords.

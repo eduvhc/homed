@@ -1,0 +1,29 @@
+version: '3'
+
+# SRP: Docker images custom builds. Task `sources:` mtime-hash skip se inalterado.
+# Tags pinned aqui (não em compose) para semantic versioning explícito.
+
+tasks:
+  forgejo-bootstrap:
+    desc: Build forgejo-bootstrap:2.0.0 (multiplex admin/oidc/config)
+    sources: [compose/stacks/h-forgejo/bootstrap/**/*]
+    cmd: docker build -t forgejo-bootstrap:2.0.0 compose/stacks/h-forgejo/bootstrap
+
+  h-yt-dlp:
+    desc: Build homed/h-yt-dlp:2.0.0 (yt-dlp + ffmpeg sobre python:3.14-alpine)
+    sources:
+      - compose/stacks/h-yt-dlp/Dockerfile
+      - compose/stacks/h-yt-dlp/scripts/**/*
+    cmd: docker build -t homed/h-yt-dlp:2.0.0 compose/stacks/h-yt-dlp
+
+  h-restic:
+    desc: Build homed/h-restic:1.0.0 (restic + supercronic)
+    sources: [compose/stacks/h-restic/bootstrap/**/*]
+    cmd: docker build -t homed/h-restic:1.0.0 compose/stacks/h-restic/bootstrap
+
+  bootstrap-db:
+    desc: Build h-bootstrap-db:1.0.0 (init helper Postgres)
+    sources:
+      - compose/stacks/h-bootstrap-db/Dockerfile
+      - compose/stacks/h-bootstrap-db/run.sh
+    cmd: docker build -t h-bootstrap-db:1.0.0 compose/stacks/h-bootstrap-db
