@@ -1,0 +1,13 @@
+---
+title: homed
+theme: dark
+color: slate
+headerStyle: clean
+language: pt
+showStats: true
+useEqualHeights: true
+
+# Quem está autenticado vem do header da Authelia (forward-auth)
+providers:
+  longhorn:
+    url: ""

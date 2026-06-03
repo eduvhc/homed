@@ -1,0 +1,162 @@
+# Gatus — monitoring declarativo (active + push).
+# Source-of-truth: este ficheiro. Mudanças requerem `docker compose restart h-gatus`.
+
+storage:
+  type: sqlite
+  path: /data/gatus.db
+
+ui:
+  title: homed · status
+  description: Monitoring do homelab
+  header: homed status
+
+security:
+  # OIDC nativo via Authelia (substituiu basic auth + forward-auth).
+  # Source: security/oidc.go (struct OIDCConfig em /Users/eduvhc/projects/references/gatus)
+  # Endpoints públicos preservados: /health, /api/v1/endpoints/*/external (push deadman).
+  oidc:
+    issuer-url: 'https://auth.iedora.com'
+    redirect-url: 'https://gatus.iedora.com/authorization-code/callback'   # path obrigatório
+    client-id: 'gatus'
+    client-secret: '${OIDC_GATUS_CLIENT_SECRET}'   # vem de secrets/h-gatus.env
+    scopes: [openid, profile, email]
+    # allowed-subjects vazio = qualquer user autenticado em Authelia pode entrar
+    # (Eu sou o único user; em multi-tenant, preencher com lista de sub claims).
+    allowed-subjects: []
+    session-ttl: '8h'
+
+# ─────────────────────────────  Alerting  ───────────────────────────────────
+# Default: ntfy.sh (public free server, app móvel). Substitui pelo teu topic
+# privado em `topic` para que só tu recebas.
+alerting:
+  ntfy:
+    url: https://ntfy.sh
+    topic: homed-eduvhc-alerts-CHANGE_ME
+    priority: 3
+    default-alert:
+      failure-threshold: 2     # 2 falhas consecutivas → alerta
+      success-threshold: 1     # 1 sucesso → recuperação
+      send-on-resolved: true
+
+# ─────────────────────────────  Active probes  ──────────────────────────────
+# Push interval default 1m; modifica em endpoints individuais se preciso.
+endpoints:
+
+  # --- Edge (Cloudflare side) ---
+  - name: tunnel-edge
+    group: edge
+    url: https://auth.iedora.com/api/health
+    interval: 2m
+    conditions:
+      - "[STATUS] == 200"                      # CF Universal cert é gerido pela CF, sem check de expiração
+    alerts:
+      - type: ntfy
+
+  # --- Auth ---
+  - name: h-auth
+    group: infra
+    url: http://h-auth:9091/api/health
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+      - "[RESPONSE_TIME] < 500"
+    alerts:
+      - type: ntfy
+
+  # --- DNS sinkhole ---
+  - name: h-adguard-dns
+    group: network
+    url: h-adguard                           # docker DNS resolve para o container
+    interval: 5m
+    dns:
+      query-name: doubleclick.net            # bloqueado → 0.0.0.0
+      query-type: A
+    conditions:
+      - "[BODY] == 0.0.0.0"
+      - "[DNS_RCODE] == NOERROR"
+    alerts:
+      - type: ntfy
+
+  - name: h-adguard-ui
+    group: network
+    url: http://h-adguard:80/control/status  # endpoint da API (não a UI raiz)
+    interval: 2m
+    conditions:
+      - "[STATUS] == any(200, 401)"           # 401 sem auth ainda significa "vivo"
+    alerts:
+      - type: ntfy
+
+  # --- Media ---
+  - name: h-navidrome
+    group: media
+    url: http://h-navidrome:4533/ping
+    interval: 2m
+    conditions:
+      - "[STATUS] == 200"
+
+  # --- Proxy: probe com Host header → caso de uso real ---
+  - name: h-proxy
+    group: infra
+    url: http://h-proxy:80/
+    interval: 1m
+    headers:
+      Host: whoami.iedora.com
+    client:
+      timeout: 5s
+      ignore-redirect: true
+    conditions:
+      - "[STATUS] == 401"                    # Authelia forward-auth retorna 401 sem cookie (Caddy proxia)
+    alerts:
+      - type: ntfy
+
+  # --- Valkey ---
+  - name: h-valkey
+    group: infra
+    url: tcp://h-valkey:6379
+    interval: 5m
+    conditions:
+      - "[CONNECTED] == true"
+    alerts:
+      - type: ntfy
+
+# ─────────────────────────────  Push (deadman) endpoints ────────────────────
+# Cada job agendado pinga POST /api/v1/endpoints/<group>_<name>/external?token=<token>&success=true|false
+# Gatus alerta se NÃO receber ping dentro de heartbeat.interval.
+
+external-endpoints:
+
+  - name: restic-backup
+    group: ops
+    token: ${GATUS_TOKEN}
+    heartbeat:
+      interval: 26h                # backup é daily 02:00 → janela 26h de margem
+    alerts:
+      - type: ntfy
+        failure-threshold: 1       # primeira falha → alerta (cron jobs não devem falhar)
+
+  - name: restic-check
+    group: ops
+    token: ${GATUS_TOKEN}
+    heartbeat:
+      interval: 192h               # weekly Sunday → 8 dias de janela (Go duration não suporta 'd')
+    alerts:
+      - type: ntfy
+        failure-threshold: 1
+
+  - name: restic-forget
+    group: ops
+    token: ${GATUS_TOKEN}
+    heartbeat:
+      interval: 192h               # weekly Sunday → 8 dias
+    alerts:
+      - type: ntfy
+        failure-threshold: 1
+
+  - name: yt-dlp-sync
+    group: ops
+    token: ${GATUS_TOKEN}
+    heartbeat:
+      interval: 26h                # daily 04:00
+    alerts:
+      - type: ntfy
+        failure-threshold: 1

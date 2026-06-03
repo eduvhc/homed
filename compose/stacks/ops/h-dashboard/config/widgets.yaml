@@ -1,0 +1,35 @@
+---
+# Widgets no topo do dashboard
+
+- logo:
+    icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/server.png
+
+- greeting:
+    text_size: xl
+    text: "homed · Beelink"
+
+- datetime:
+    text_size: l
+    format:
+      timeStyle: short
+      dateStyle: short
+
+# Métricas detalhadas via Glances (CPU per-core, temperatura, IO, rede)
+- glances:
+    url: http://h-glances:61208
+    expanded: true
+    cpu: true
+    mem: true
+    cputemp: true
+    uptime: true
+    disk: /rootfs
+    diskio: true
+    network: eth0
+
+# Recursos básicos (fallback caso Glances falhe)
+- resources:
+    cpu: true
+    memory: true
+    disk: /
+    cputemp: false
+    label: "host"

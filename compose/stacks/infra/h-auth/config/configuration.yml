@@ -1,0 +1,147 @@
+---
+# Authelia — SSO 2FA para *.iedora.com
+# Secrets vêm de env vars (AUTHELIA_*) injetadas via env_file.
+
+server:
+  address: 'tcp://:9091'
+
+log:
+  level: 'info'
+  format: 'text'
+
+theme: 'auto'
+
+totp:
+  issuer: 'iedora.com'
+  algorithm: 'sha1'
+  digits: 6
+  period: 30
+
+identity_validation:
+  reset_password:
+    # jwt_secret vem de AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET
+    {}
+
+authentication_backend:
+  password_reset:
+    disable: false
+  refresh_interval: '5 minutes'
+  file:
+    path: '/config/users_database.yml'
+    password:
+      algorithm: 'argon2'
+      argon2:
+        variant: 'argon2id'
+        iterations: 3
+        memory: 65536
+        parallelism: 4
+        key_length: 32
+        salt_length: 16
+
+access_control:
+  default_policy: 'deny'
+  rules:
+    # Subsonic API para clientes móveis Navidrome — bypass (creds da app cobrem)
+    - domain: 'musica.iedora.com'
+      resources:
+        - '^/rest/.*$'
+      policy: 'bypass'
+    # Tudo o resto sob *.iedora.com → password apenas (sem 2FA por agora)
+    # TODO: subir para 'two_factor' antes de expor publicamente
+    - domain: '*.iedora.com'
+      policy: 'one_factor'
+
+session:
+  # secret vem de AUTHELIA_SESSION_SECRET
+  cookies:
+    - name: 'authelia_session'
+      domain: 'iedora.com'
+      authelia_url: 'https://auth.iedora.com'
+      default_redirection_url: 'https://iedora.com'
+      expiration: '12 hours'
+      inactivity: '1 hour'
+      remember_me: '1 month'
+  redis:
+    host: 'h-valkey'
+    port: 6379
+    database_index: 0      # DB 0 reservada à Authelia (outras apps usam 1+)
+
+regulation:
+  max_retries: 3
+  find_time: '2 minutes'
+  ban_time: '10 minutes'
+
+storage:
+  # encryption_key vem de AUTHELIA_STORAGE_ENCRYPTION_KEY
+  local:
+    path: '/config/db.sqlite3'
+  # TODO migrar para postgres partilhado quando o stack subir:
+  # postgres:
+  #   address: 'tcp://postgres:5432'
+  #   database: 'authelia'
+  #   username: 'authelia'
+  #   # password via AUTHELIA_STORAGE_POSTGRES_PASSWORD
+
+notifier:
+  disable_startup_check: false
+  # Em prod: SMTP. Em dev/OrbStack: filesystem (mensagens em /config/notification.txt)
+  filesystem:
+    filename: '/config/notification.txt'
+  # smtp:
+  #   address: 'smtp://smtp.sendgrid.net:587'
+  #   username: 'apikey'
+  #   sender: 'auth@iedora.com'
+  #   # password via AUTHELIA_NOTIFIER_SMTP_PASSWORD
+
+# ─── OIDC provider ──────────────────────────────────────────────────────────
+# Authelia faz de IdP central. Cada serviço self-hosted (Forgejo, etc.) regista-se
+# como cliente OAuth2/OIDC e delega login para aqui.
+identity_providers:
+  oidc:
+    # hmac_secret via env: AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET.
+    # JWKs key via template "secret" (requer X_AUTHELIA_CONFIG_FILTERS=template no env).
+    # Source: internal/configuration/koanf_provider_filtered_file.go:140
+    #         internal/templates/funcs.go:30 (função `secret` strip-newline)
+    jwks:
+      - key_id: 'rsa-1'
+        algorithm: 'RS256'
+        use: 'sig'
+        key: |
+          {{ secret "/config/oidc-issuer.pem" | nindent 10 }}
+    cors:
+      endpoints: [authorization, token, revocation, introspection, userinfo]
+      allowed_origins_from_client_redirect_uris: true
+    clients:
+      - client_id: 'forgejo'
+        client_name: 'Forge · iedora'
+        # Argon2id hash do client secret. Plaintext em secrets/h-forgejo.env.sops.
+        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$r7++g7AjKwZM0mEZxvbtEQ$43U+PAvNhXozdTkwQtmb5pG7tnTUyFQrN8aXbhjWwf0'
+        public: false
+        authorization_policy: 'one_factor'
+        consent_mode: 'pre-configured'
+        pre_configured_consent_duration: '30 days'
+        # v4.39: requested_audience_mode explícito sobre que audiences são incluídos
+        # no access token. 'explicit' = só audiences pedidos via `audience` param.
+        # Source: internal/configuration/schema/identity_providers.go:178
+        requested_audience_mode: 'explicit'
+        redirect_uris:
+          - 'https://forge.iedora.com/user/oauth2/authelia/callback'
+        scopes: [openid, profile, email, groups]
+        userinfo_signed_response_alg: 'RS256'   # signed JWT (mais seguro que 'none')
+        token_endpoint_auth_method: 'client_secret_basic'
+
+      - client_id: 'gatus'
+        client_name: 'Gatus · iedora'
+        # Argon2id hash. Plaintext em secrets/h-gatus.env.sops.
+        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$a5KVTyPXHOTxa6h5LkExBg$OzSo9iwZQ1NE5UYnu33jjl8gAD0C3ghqJ7t7vyzPF0w'
+        public: false
+        authorization_policy: 'one_factor'
+        consent_mode: 'pre-configured'
+        pre_configured_consent_duration: '30 days'
+        requested_audience_mode: 'explicit'
+        # Path obrigatório pelo Gatus (security/oidc.go:39):
+        redirect_uris:
+          - 'https://gatus.iedora.com/authorization-code/callback'
+        scopes: [openid, profile, email]   # Gatus só usa 'sub'; profile+email para futuras restrições
+        userinfo_signed_response_alg: 'RS256'
+        token_endpoint_auth_method: 'client_secret_basic'

@@ -1,0 +1,6 @@
+---
+# Integração Docker: lê o socket para mostrar estado dos containers
+# (up/down/cpu/mem) referenciados em services.yaml com `server: my-docker`.
+
+my-docker:
+  socket: /var/run/docker.sock

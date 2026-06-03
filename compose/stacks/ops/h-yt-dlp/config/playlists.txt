@@ -1,0 +1,9 @@
+# Uma URL por linha (playlist ou canal).
+# Linhas começadas por # são ignoradas.
+#
+# Exemplos:
+# https://www.youtube.com/playlist?list=PLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# https://www.youtube.com/@nomedoCanal
+# https://www.youtube.com/@nomedoCanal/videos
+#
+# Adiciona as tuas playlists/canais por baixo desta linha.

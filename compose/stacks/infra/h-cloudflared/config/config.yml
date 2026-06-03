@@ -1,0 +1,19 @@
+# Ingress do Cloudflare Tunnel — quem-fala-com-quem dentro do Beelink.
+# Tudo cai no h-proxy (Caddy), que faz routing por Host header.
+# Single catch-all rule: *.iedora.com → Caddy. Outras hostnames → 404.
+
+ingress:
+  - hostname: "*.iedora.com"
+    service: http://h-proxy:80
+    originRequest:
+      noTLSVerify: true            # tráfego intra-network é HTTP plain
+      connectTimeout: 30s
+  # Catch-all final obrigatório
+  - service: http_status:404
+
+# Métricas internas (Prometheus-compatível) — útil para Homepage/Glances dashboards
+metrics: 0.0.0.0:2000
+
+# Diminui verbosity em runtime
+loglevel: info
+transport-loglevel: warn

@@ -1,0 +1,20 @@
+---
+- Repos:
+    - homed:
+        - abbr: HD
+          href: https://github.com/eduvhc/homed
+
+    - dotfiles:
+        - abbr: DF
+          href: https://github.com/eduvhc/dotfiles
+
+- Refs:
+    - Authelia docs:
+        - abbr: AT
+          href: https://www.authelia.com/configuration/
+    - Caddy docs:
+        - abbr: CD
+          href: https://caddyserver.com/docs/
+    - Navidrome:
+        - abbr: ND
+          href: https://www.navidrome.org/docs/

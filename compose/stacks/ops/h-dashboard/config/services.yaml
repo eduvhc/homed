@@ -1,0 +1,57 @@
+---
+- Auth:
+    - Authelia:
+        href: https://auth.iedora.com
+        description: SSO + 2FA gateway
+        icon: authelia.svg
+        server: my-docker
+        container: h-auth
+        siteMonitor: http://h-auth:9091/api/health
+
+- Network:
+    - AdGuard Home:
+        href: https://adguard.iedora.com
+        description: DNS sinkhole, blocklists, registos locais
+        icon: adguard-home.svg
+        server: my-docker
+        container: h-adguard
+        siteMonitor: http://h-adguard:80
+
+- Music:
+    - Navidrome:
+        href: https://musica.iedora.com
+        description: Music server (Subsonic-compatible)
+        icon: navidrome.svg
+        server: my-docker
+        container: h-navidrome
+        siteMonitor: http://h-navidrome:4533/ping
+
+    - Lidarr:
+        href: https://lidarr.iedora.com
+        description: Music collection manager
+        icon: lidarr.svg
+        server: my-docker
+        container: h-lidarr
+
+- Downloads:
+    - Prowlarr:
+        href: https://prowlarr.iedora.com
+        description: Indexer manager
+        icon: prowlarr.svg
+        server: my-docker
+        container: h-prowlarr
+
+    - qBittorrent:
+        href: https://qb.iedora.com
+        description: Torrent client
+        icon: qbittorrent.svg
+        server: my-docker
+        container: h-qbittorrent
+
+- Edge:
+    - Caddy (h-proxy):
+        href: http://localhost:18080
+        description: Reverse proxy + Authelia forward-auth
+        icon: caddy.svg
+        server: my-docker
+        container: h-proxy
