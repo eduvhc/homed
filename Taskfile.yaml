@@ -32,6 +32,7 @@ tasks:
     deps:
       - decrypt
       - networks
+      - forgejo-secrets-init
       - build-bootstrap-db
       - build-forgejo-bootstrap
     cmd: COMPOSE_PROFILES=bootstrap {{.COMPOSE}} up -d --wait
@@ -95,6 +96,30 @@ tasks:
       vars: [NAME]
     cmds:
       - sops --input-type dotenv --output-type dotenv secrets/{{.NAME}}.env
+
+  forgejo-secrets-init:
+    desc: |
+      Gera INTERNAL_TOKEN + SECRET_KEY do Forgejo na 1ª vez (idempotente).
+      Source: setting/security.go:304-309 — se ausentes E InstallLock=true,
+      forgejo tenta saveCfg para app.ini (que está :ro). Pré-fornecer via
+      env (SOPS) evita o write fail. Skip se já presentes em secrets.
+    cmd: |
+      task decrypt
+      need=0
+      grep -q '^FORGEJO__security__INTERNAL_TOKEN=' secrets/h-forgejo.env || need=1
+      grep -q '^FORGEJO__security__SECRET_KEY='     secrets/h-forgejo.env || need=1
+      if [ "$need" = "1" ]; then
+        FORGEJO_IMG=codeberg.org/forgejo/forgejo:15-rootless
+        grep -q '^FORGEJO__security__INTERNAL_TOKEN=' secrets/h-forgejo.env || \
+          echo "FORGEJO__security__INTERNAL_TOKEN=$(docker run --rm "$FORGEJO_IMG" forgejo generate secret INTERNAL_TOKEN)" >> secrets/h-forgejo.env
+        grep -q '^FORGEJO__security__SECRET_KEY=' secrets/h-forgejo.env || \
+          echo "FORGEJO__security__SECRET_KEY=$(docker run --rm "$FORGEJO_IMG" forgejo generate secret SECRET_KEY)" >> secrets/h-forgejo.env
+        echo "✓ Forgejo INTERNAL_TOKEN + SECRET_KEY gerados em secrets/h-forgejo.env"
+      else
+        echo "skip: Forgejo secrets já presentes"
+      fi
+      task lock
+    silent: true
 
   build-bootstrap-db:
     desc: Build local h-bootstrap-db image (re-correr sempre que run.sh muda)
