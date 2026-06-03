@@ -105,7 +105,7 @@ tasks:
       env (SOPS) evita o write fail. Skip se já presentes em secrets.
       NÃO re-encripta no fim — secrets ficam decrypted em disco para o
       compose up ler env_file (normal — task lock é manual antes de commit).
-    deps: [decrypt]
+      Pré-req: task decrypt já correu (é dep de up-bootstrap).
     cmd: |
       need=0
       grep -q '^FORGEJO__security__INTERNAL_TOKEN=' secrets/h-forgejo.env || need=1
