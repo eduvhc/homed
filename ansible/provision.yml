@@ -9,14 +9,17 @@
       x86_64: amd64
       aarch64: arm64
     debian_arch: "{{ arch_map[ansible_architecture] | default(ansible_architecture) }}"
+    # Lowercase 'debian' ou 'ubuntu' — usado nas URLs de docker/tailscale.
+    # Ambos os upstreams seguem o mesmo path scheme (/linux/{distro}, /stable/{distro}).
+    distro: "{{ ansible_distribution | lower }}"
 
   pre_tasks:
-    - name: Assert Debian 12+
+    - name: Assert Debian 12+ ou Ubuntu 22.04+
       ansible.builtin.assert:
         that:
-          - ansible_distribution == 'Debian'
-          - ansible_distribution_major_version | int >= 12
-        fail_msg: "Este playbook assume Debian 12+ (atual: {{ ansible_distribution }} {{ ansible_distribution_version }})"
+          - (ansible_distribution == 'Debian' and ansible_distribution_major_version | int >= 12)
+            or (ansible_distribution == 'Ubuntu' and ansible_distribution_major_version | int >= 22)
+        fail_msg: "Suportados: Debian 12+ ou Ubuntu 22.04+ (atual: {{ ansible_distribution }} {{ ansible_distribution_version }})"
 
   tasks:
 
@@ -38,7 +41,7 @@
     - name: Docker · keyring
       become: true
       ansible.builtin.get_url:
-        url: https://download.docker.com/linux/debian/gpg
+        url: "https://download.docker.com/linux/{{ distro }}/gpg"
         dest: /etc/apt/keyrings/docker.asc
         mode: '0644'
         force: false
@@ -50,7 +53,7 @@
         mode: '0644'
         content: |
           Types: deb
-          URIs: https://download.docker.com/linux/debian
+          URIs: https://download.docker.com/linux/{{ distro }}
           Suites: {{ ansible_distribution_release }}
           Components: stable
           Architectures: {{ debian_arch }}
@@ -118,14 +121,14 @@
     - name: Tailscale · keyring
       become: true
       ansible.builtin.get_url:
-        url: "https://pkgs.tailscale.com/stable/debian/{{ ansible_distribution_release }}.noarmor.gpg"
+        url: "https://pkgs.tailscale.com/stable/{{ distro }}/{{ ansible_distribution_release }}.noarmor.gpg"
         dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
         mode: '0644'
 
     - name: Tailscale · apt source
       become: true
       ansible.builtin.get_url:
-        url: "https://pkgs.tailscale.com/stable/debian/{{ ansible_distribution_release }}.tailscale-keyring.list"
+        url: "https://pkgs.tailscale.com/stable/{{ distro }}/{{ ansible_distribution_release }}.tailscale-keyring.list"
         dest: /etc/apt/sources.list.d/tailscale.list
         mode: '0644'
 
