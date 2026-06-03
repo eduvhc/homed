@@ -13,7 +13,7 @@ set -eu
 : "${OIDC_FORGEJO_CLIENT_SECRET:?}"
 : "${OIDC_DISCOVERY_URL:?}"
 
-CONFIG=/etc/gitea/app.ini
+CONFIG="${APP_INI:-/etc/gitea/app.ini}"
 
 if forgejo --config "$CONFIG" admin auth list 2>/dev/null | awk 'NR>1 {print $2}' | grep -qx "$OIDC_SOURCE_NAME"; then
   echo "skip: OIDC source '$OIDC_SOURCE_NAME' já existe"

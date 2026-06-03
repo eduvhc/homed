@@ -13,7 +13,7 @@ set -eu
 : "${FORGEJO_ADMIN_PASSWORD:?}"
 : "${FORGEJO_ADMIN_EMAIL:?}"
 
-CONFIG=/etc/gitea/app.ini
+CONFIG="${APP_INI:-/etc/gitea/app.ini}"
 HAS_USER() { forgejo --config "$CONFIG" admin user list 2>/dev/null | awk 'NR>1 {print $2}' | grep -qx "$1"; }
 
 # Migração declarativa idempotente: se FORGEJO_ADMIN_PREVIOUS_USERNAME existe
