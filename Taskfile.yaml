@@ -65,6 +65,25 @@ tasks:
     cmds:
       - "{{.COMPOSE}} down"
 
+  forgejo-reset:
+    desc: |
+      Wipe declarativo do state do Forgejo + re-bootstrap (uso: task forgejo-reset CONFIRM=yes).
+      Apaga: forgejo DB+role no postgres, volumes h-forgejo-data + h-forgejo-creds.
+      Preserva: postgres data (outras DBs), restic repo, navidrome música.
+      Pós-execução: task up-bootstrap recria forgejo fresh com o FORGEJO_ADMIN_USERNAME
+      definido nos secrets. Usar quando admin username muda, ou para migração limpa.
+    requires:
+      vars: [CONFIRM]
+    preconditions:
+      - sh: '[ "{{.CONFIRM}}" = "yes" ]'
+        msg: 'Set CONFIRM=yes para confirmar wipe destrutivo do forgejo state'
+    cmds:
+      - "{{.COMPOSE}} rm -fsv h-forgejo h-doco-cd forgejo-db-bootstrap forgejo-admin-bootstrap forgejo-oidc-bootstrap forgejo-config-bootstrap 2>/dev/null || true"
+      - "{{.COMPOSE}} exec -T h-postgres sh -c 'PGPASSWORD=\"$POSTGRES_PASSWORD\" psql -U postgres -c \"DROP DATABASE IF EXISTS forgejo;\"'"
+      - "{{.COMPOSE}} exec -T h-postgres sh -c 'PGPASSWORD=\"$POSTGRES_PASSWORD\" psql -U postgres -c \"DROP ROLE IF EXISTS forgejo;\"'"
+      - docker volume rm -f compose_h-forgejo-data compose_h-forgejo-creds
+      - 'echo "✓ forgejo state wiped — corre task up-bootstrap para re-criar"'
+
   decrypt:
     desc: Decifra in-place secrets/*.env (idempotente — só decifra os encriptados)
     cmd: |
