@@ -15,7 +15,7 @@ services:
     environment:
       BOOTSTRAP_STEP: config
       FORGEJO_URL: http://h-forgejo:3000
-      REPO_OWNER: ${FORGEJO_ADMIN_USERNAME}   # derivado do env_file — alinha com admin user
+      # REPO_OWNER: default no script para $FORGEJO_ADMIN_USERNAME (vem do env_file)
       REPO_NAME: homed
       WEBHOOK_URL: https://deploy.iedora.com/v1/webhook
       TOKEN_NAME: h-doco-cd

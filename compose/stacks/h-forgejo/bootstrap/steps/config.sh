@@ -11,7 +11,7 @@ set -eu
 : "${FORGEJO_URL:?FORGEJO_URL obrigatório (ex.: http://h-forgejo:3000)}"
 : "${FORGEJO_ADMIN_USERNAME:?}"
 : "${FORGEJO_ADMIN_PASSWORD:?}"
-: "${REPO_OWNER:?REPO_OWNER obrigatório}"
+: "${REPO_OWNER:=$FORGEJO_ADMIN_USERNAME}"   # auto-align com admin user (rename safe)
 : "${REPO_NAME:?REPO_NAME obrigatório}"
 : "${WEBHOOK_URL:?WEBHOOK_URL obrigatório}"
 : "${TOKEN_NAME:=h-doco-cd}"
