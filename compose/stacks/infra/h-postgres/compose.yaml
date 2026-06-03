@@ -75,11 +75,15 @@ services:
       - ../../../../data/postgres-dumps:/backups
     networks:
       - internal
+    # Healthcheck: a imagem não traz curl/wget, e /healthcheck.sh não existe.
+    # Validamos só que o container chega à DB (se chega, vai conseguir dumpar).
+    # O go-cron scheduler em si valida-se via timestamp do último dump em /backups.
     healthcheck:
-      test: ["CMD", "sh", "/healthcheck.sh"]
+      test: ["CMD-SHELL", "pg_isready -h h-postgres -U postgres"]
       interval: 1m
       timeout: 10s
       retries: 3
+      start_period: 30s
 
 volumes:
   h-postgres-data:
