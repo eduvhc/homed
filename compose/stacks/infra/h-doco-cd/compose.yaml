@@ -1,0 +1,70 @@
+# h-doco-cd — GitOps agent: recebe webhook do Forgejo, clona o repo,
+# decifra SOPS in-place, e faz `compose up` do stack `homed`.
+#
+# 100% declarativo:
+#   - GIT_ACCESS_TOKEN: gerado pelo forgejo-config-bootstrap → volume h-forgejo-creds
+#   - WEBHOOK_SECRET:   gerado pelo forgejo-config-bootstrap → volume h-forgejo-creds
+#   - SOPS_AGE_KEY:     Docker secret bind do ~/.config/sops/age/keys.txt do host
+# Nenhuma configuração manual; nenhum secret committed no env_file desta stack.
+#
+# Auto-gestão: profile=bootstrap → o agente não se mata a si próprio quando
+# aplica o stack `homed` (que corre com profile vazio).
+#
+# Endpoint público: https://deploy.iedora.com/v1/webhook
+# Ingress: Caddy → tunnel CF. Sem Authelia (webhooks autenticam-se via HMAC).
+#
+# Path consistency: doco-cd faz symlink-trick (cmd/doco-cd/main.go:60-90)
+# — descobre o seu próprio MountPoint via Docker API e cria symlink dentro
+# do container para que paths absolutos resolvam idênticos host/container.
+
+services:
+  h-doco-cd:
+    image: ghcr.io/kimdre/doco-cd:0.90.0
+    container_name: h-doco-cd
+    restart: unless-stopped
+    profiles: [bootstrap]
+    depends_on:
+      forgejo-config-bootstrap: { condition: service_completed_successfully }
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+    environment:
+      TZ: Europe/Lisbon
+      HTTP_PORT: "9000"
+      LOG_LEVEL: info
+      AUTH_TYPE: oauth2                           # Forgejo PAT via HTTPS basic
+      DEPLOY_CONFIG_BASE_DIR: /                   # .doco-cd.yaml na raiz
+      MAX_CONCURRENT_DEPLOYMENTS: "1"             # serializa: 1 stack `homed` à vez
+      DOCKER_SWARM_FEATURES: "false"              # standalone, não swarm
+      GIT_ACCESS_TOKEN_FILE: /shared/git_access_token
+      WEBHOOK_SECRET_FILE:   /shared/webhook_secret
+      SOPS_AGE_KEY_FILE:     /run/secrets/sops_age_key
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - h-doco-cd-data:/data
+      - h-forgejo-creds:/shared:ro                # PAT + webhook secret (gerados pelo bootstrap)
+    secrets:
+      - sops_age_key
+    cap_drop: [ALL]
+    networks: [edge, internal]                    # internal: para chegar a h-forgejo:3000
+    labels:
+      caddy: http://deploy.iedora.com
+      caddy.reverse_proxy: "{{upstreams 9000}}"
+    healthcheck:
+      test: ["CMD", "/doco-cd", "healthcheck"]
+      start_period: 15s
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+secrets:
+  sops_age_key:
+    file: ${HOME}/.config/sops/age/keys.txt       # única chave humana — pré-req da máquina
+
+volumes:
+  h-doco-cd-data:
+  h-forgejo-creds:                                # decl. idêntica à do h-forgejo stack (merge OK)
+
+networks:
+  edge:     { external: true }
+  internal: { external: true }

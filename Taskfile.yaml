@@ -19,17 +19,26 @@ tasks:
       - for n in edge internal dns; do docker network ls --format '{{`{{.Name}}`}}' | grep -q "^$n$" || docker network create "$n"; done
     silent: true
 
-  docker-sock-gid:
-    desc: Detecta GID do docker.sock no host (export via DOCKER_SOCK_GID)
-    cmds:
-      - docker run --rm -v /var/run/docker.sock:/var/run/docker.sock alpine stat -c '%g' /var/run/docker.sock
-    silent: true
-
   up:
-    desc: Decifra secrets e arranca o stack
+    desc: Decifra secrets e arranca o stack (sem profile bootstrap)
     deps: [decrypt, networks]
-    cmds:
-      - "{{.COMPOSE}} up -d"
+    cmd: "{{.COMPOSE}} up -d"
+
+  up-bootstrap:
+    desc: |
+      Bootstrap completo de máquina nova num só comando:
+      decrypt → networks → builds custom → compose up --profile bootstrap.
+      Pré-req: ~/.config/sops/age/keys.txt e repo já pushed para forge.iedora.com.
+    deps:
+      - decrypt
+      - networks
+      - build-bootstrap-db
+      - build-forgejo-config-bootstrap
+    cmd: COMPOSE_PROFILES=bootstrap {{.COMPOSE}} up -d --wait
+
+  build-forgejo-config-bootstrap:
+    desc: Build local da imagem forgejo-config-bootstrap (idempotente)
+    cmd: docker build -q -t forgejo-config-bootstrap:1.0.0 compose/stacks/infra/h-forgejo/bootstrap > /dev/null
 
   down:
     desc: Pára o stack (decrypted .env files ficam no disco)
@@ -37,53 +46,44 @@ tasks:
       - "{{.COMPOSE}} down"
 
   decrypt:
-    desc: Decifra todos os secrets/*.env.sops -> secrets/*.env (mode 600)
-    cmds:
-      - |
-        for f in secrets/*.env.sops; do
-          [ -e "$f" ] || continue
-          out="${f%.sops}"
-          sops -d --input-type dotenv --output-type dotenv "$f" > "$out"
-          chmod 600 "$out"
-        done
+    desc: Decifra in-place secrets/*.env (idempotente — só decifra os encriptados)
+    cmd: |
+      for f in secrets/*.env; do
+        if grep -qE 'sops[:_]' "$f"; then
+          sops -d -i --input-type dotenv --output-type dotenv "$f"
+          chmod 600 "$f"
+        fi
+      done
+      true
     silent: true
 
-  clean:
-    desc: Remove .env decifrados (deixa apenas os *.env.sops)
-    cmds:
-      - find secrets -maxdepth 1 -type f -name "*.env" -not -name "*.env.sops" -delete
+  lock:
+    desc: Re-encripta in-place secrets/*.env (correr antes de commit)
+    cmd: |
+      for f in secrets/*.env; do
+        if ! grep -qE 'sops[:_]' "$f"; then
+          sops -e -i --input-type dotenv --output-type dotenv "$f"
+        fi
+      done
+      true
+    silent: true
 
   edit:
-    desc: 'Editar um secret (uso: task edit NAME=h-auth)'
+    desc: 'Editar um secret (uso: task edit NAME=h-auth) — sops abre, edita, re-encripta'
     requires:
       vars: [NAME]
     cmds:
-      - sops --input-type dotenv --output-type dotenv secrets/{{.NAME}}.env.sops
+      - sops --input-type dotenv --output-type dotenv secrets/{{.NAME}}.env
 
   build-bootstrap-db:
     desc: Build local h-bootstrap-db image (re-correr sempre que run.sh muda)
     cmds:
       - docker build -t h-bootstrap-db:1.0.0 compose/stacks/infra/h-bootstrap-db
 
-  build-deploy:
-    desc: Build local h-deploy image (re-correr sempre que Dockerfile/scripts mudam)
-    cmds:
-      - docker build -t h-deploy:1.0.0 compose/stacks/infra/h-deploy
-
   deploy-logs:
-    desc: Tail dos logs de deploy (homed + apps)
+    desc: Tail dos logs do agente doco-cd
     cmds:
-      - tail -f data/deploy/homed.log data/deploy/app.log 2>/dev/null || tail -f data/deploy/*.log
-
-  rollback:
-    desc: 'Rollback de uma app para uma SHA anterior (uso: task rollback APP=lyzer-monorepo SHA=abc1234)'
-    requires:
-      vars: [APP, SHA]
-    cmds:
-      - |
-        echo "→ a actualizar compose para image: lyzer/{{.APP}}:sha-{{.SHA}}"
-        echo "→ edita manualmente o compose.yaml da app e re-corre 'task up' (rollback automático ainda não implementado)"
-        docker images lyzer/{{.APP}} --format '{{`{{.Tag}}\t{{.CreatedAt}}`}}' | grep -E '^sha-' | head -10
+      - docker logs -f --tail 200 h-doco-cd
 
   migrate:
     desc: 'Re-correr migrations de uma app (uso: task migrate APP=imopush)'
@@ -94,23 +94,23 @@ tasks:
       - "{{.COMPOSE}} up --exit-code-from {{.APP}}-db-migrate {{.APP}}-db-bootstrap {{.APP}}-db-migrate"
 
   encrypt:
-    desc: 'Encriptar um novo secret a partir de plaintext (uso: task encrypt NAME=h-foo)'
+    desc: 'Encriptar in-place um secret novo (uso: task encrypt NAME=h-foo)'
     requires:
       vars: [NAME]
     cmds:
       - test -f secrets/{{.NAME}}.env
-      - sops -e --input-type dotenv --output-type dotenv secrets/{{.NAME}}.env > secrets/{{.NAME}}.env.sops
-      - rm secrets/{{.NAME}}.env
-      - echo "✓ secrets/{{.NAME}}.env.sops criado; plaintext removido"
+      - sops -e -i --input-type dotenv --output-type dotenv secrets/{{.NAME}}.env
+      - echo "✓ secrets/{{.NAME}}.env encriptado in-place"
 
   rotate:
-    desc: Re-encriptar todos os secrets com a lista atual de .sops.yaml
-    cmds:
-      - |
-        for f in secrets/*.env.sops; do
+    desc: Re-encripta todos os secrets com a lista atual de recipients em .sops.yaml
+    cmd: |
+      for f in secrets/*.env; do
+        if grep -qE 'sops[:_]' "$f"; then
           sops updatekeys -y "$f"
-        done
-      - echo "✓ rotação concluída"
+        fi
+      done
+    silent: true
 
   ps:
     desc: Estado dos containers
@@ -123,10 +123,6 @@ tasks:
       vars: [NAME]
     cmds:
       - "{{.COMPOSE}} logs -f --tail=100 {{.NAME}}"
-
-  # ─────────────────────────────  Restic backups  ──────────────────────────────
-  # Operações ad-hoc no container já existente (h-restic-backup). Cron continua
-  # autónomo; estas tasks são para inicialização, validação e operações manuais.
 
   restic:
     desc: 'Restic CLI ad-hoc (uso: task restic -- snapshots / -- ls latest)'
@@ -163,10 +159,6 @@ tasks:
     desc: 'Estatísticas: tamanho, blobs, deduplicação'
     cmds:
       - "{{.COMPOSE}} exec h-restic-backup restic stats --mode raw-data"
-
-  # ─────────────────────────────  Tofu (Cloudflare + R2)  ───────────────────────
-  # Pattern para tofu-*: decifrar tfvars.sops para tmp, injetar passphrase de
-  # state encryption, correr tofu, limpar plaintext no fim.
 
   _tofu:
     desc: 'Internal — tofu wrapper. Lê CLOUDFLARE_API_TOKEN do macOS Keychain, descobre account_id e zone_id via CF API, gere passphrase de state encryption no Keychain.'
@@ -213,14 +205,11 @@ tasks:
     cmds: [{ task: _tofu, vars: { CMD: 'apply -auto-approve' } }]
 
   tofu-sync-secrets:
-    desc: 'Lê outputs sensíveis do tofu, escreve secrets/h-cloudflared.env.sops'
-    cmds:
-      - task _tofu CMD='output -raw tunnel_token' > secrets/h-cloudflared.env.tmp
-      - awk '/^./ {print "TUNNEL_TOKEN=" $0}' secrets/h-cloudflared.env.tmp > secrets/h-cloudflared.env
-      - rm secrets/h-cloudflared.env.tmp
-      - task encrypt NAME=h-cloudflared
+    desc: 'Lê tunnel_token do tofu, escreve secrets/h-cloudflared.env encriptado'
+    cmd: |
+      echo "TUNNEL_TOKEN=$(task _tofu CMD='output -raw tunnel_token')" > secrets/h-cloudflared.env
+      sops -e -i --input-type dotenv --output-type dotenv secrets/h-cloudflared.env
 
-  # ─────────────────────────────  Bootstrap (Ansible)  ──────────────────────────
   provision:
     desc: 'Bootstrap declarativo da máquina (Debian 12). Idempotente.'
     cmds:
@@ -231,14 +220,3 @@ tasks:
     cmds:
       - ansible-playbook -i ansible/inventory.yml -l {{.HOST | default "localhost"}} ansible/provision.yml --check --diff
 
-  audit-plaintext:
-    desc: Procura ficheiros plaintext que NÃO deviam estar no git
-    cmds:
-      - |
-        bad=$(find secrets -maxdepth 1 -type f -name "*.env" -not -name "*.env.sops" 2>/dev/null)
-        if [ -n "$bad" ]; then
-          echo "⚠️  PLAINTEXT detectado (deve estar em .gitignore):"
-          echo "$bad"
-        else
-          echo "✓ secrets/ limpo de plaintext"
-        fi

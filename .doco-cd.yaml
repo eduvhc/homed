@@ -1,0 +1,27 @@
+# doco-cd deployment config — descreve o stack `homed` ao agente.
+#
+# Stack único: todos os serviços do compose top-level. O próprio h-doco-cd
+# (e o forgejo-config-bootstrap) têm profile=bootstrap → não incluídos
+# quando o doco-cd faz `compose up` sem profiles. Auto-protecção.
+#
+# Convenção de secrets: secrets/*.env contêm SOPS payload no git. O doco-cd
+# faz walk recursivo, detecta sops content por padrão (`sops_` ou `sops:` +
+# `ENC[`), e decifra in-place antes do compose up. Sem nomes mágicos.
+#
+# repository_url: override para tráfego interno (h-forgejo é vizinho na
+# network `internal`). Evita TLS público + tunnel CF para um clone que
+# nunca sai do Docker daemon.
+
+name: homed
+working_dir: compose
+compose_files:
+  - compose.yaml
+
+repository_url: http://h-forgejo:3000/edu/homed.git
+reference: refs/heads/main
+
+remove_orphans: true            # apaga serviços que saíram do compose
+prune_images: false             # mantém imagens custom (h-bootstrap-db, …)
+wait_running_jobs: true         # respeita backup restic em curso
+force_image_pull: true          # pull on every deploy (renovate-style freshness)
+timeout: 600                    # ~20 stacks, 10 min generoso

@@ -1102,6 +1102,53 @@
         </svg>
       </article>
 
+      <!-- GitOps deploy pattern -->
+      <article class="mini wide">
+        <header><span class="mini-tag">tema 06</span><h4>Como cada <code>git push</code> chega aos containers (sem UI manual)</h4></header>
+        <p class="mini-lead">
+          Bootstrap declarativo em três init containers idempotentes:
+          <code>forgejo-admin-bootstrap</code> cria o admin user (CLI),
+          <code>forgejo-config-bootstrap</code> gera PAT + webhook via API REST e escreve-os
+          num volume partilhado <code>h-forgejo-creds</code>,
+          <code>h-doco-cd</code> lê-os via <code>*_FILE</code> envs.
+          <code>SOPS_AGE_KEY</code> entra como Docker secret bind do <code>~/.config/sops/age/keys.txt</code>.
+          Resultado: <code>task up-bootstrap</code> é o único comando humano.
+        </p>
+        <svg viewBox="0 0 760 160" class="mini-svg">
+          <defs>
+            <marker id="ma6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#0c0a07"/></marker>
+          </defs>
+          <g>
+            <rect x="10" y="30" width="150" height="80" class="m-box m-ctrl"/>
+            <text x="22" y="56" class="m-name">git push</text>
+            <text x="22" y="72" class="m-sub">forge.iedora.com</text>
+            <text x="22" y="88" class="m-sub">edu/homed · main</text>
+          </g>
+          <g>
+            <rect x="190" y="30" width="160" height="80" class="m-box m-edge"/>
+            <text x="202" y="56" class="m-name">Forgejo webhook</text>
+            <text x="202" y="72" class="m-sub">X-Forgejo-Signature</text>
+            <text x="202" y="88" class="m-sub">HMAC SHA-256</text>
+          </g>
+          <g>
+            <rect x="380" y="30" width="180" height="80" class="m-box m-ops"/>
+            <text x="392" y="56" class="m-name">h-doco-cd :9000</text>
+            <text x="392" y="72" class="m-sub">/v1/webhook</text>
+            <text x="392" y="88" class="m-sub">PAT+SECRET de h-forgejo-creds</text>
+          </g>
+          <g>
+            <rect x="590" y="30" width="160" height="80" class="m-box m-app"/>
+            <text x="602" y="56" class="m-name">compose up -d</text>
+            <text x="602" y="72" class="m-sub">stack homed</text>
+            <text x="602" y="88" class="m-sub">(profile bootstrap = self)</text>
+          </g>
+          <path d="M 160 70 H 190" class="m-link" marker-end="url(#ma6)"/>
+          <path d="M 350 70 H 380" class="m-link" marker-end="url(#ma6)"/>
+          <path d="M 560 70 H 590" class="m-link" marker-end="url(#ma6)"/>
+          <text x="22" y="140" class="m-edge">Path consistency: symlink-trick do doco-cd (cmd/main.go) — paths absolutos resolvem idênticos no host e no container.</text>
+        </svg>
+      </article>
+
     </div>
   </section>
 
@@ -1401,6 +1448,40 @@
           Bootstrap (CREATE ROLE+DATABASE) é o passo que o dbmate não faz: pre-requisito num container caseiro mínimo (15 linhas de shell, idempotente).
           Pattern: <code>bootstrap → migrate → app</code> ligado por <code>service_completed_successfully</code>.
           Resultado: <code>docker compose up</code> sobe tudo do zero numa máquina nova, sem intervenção humana.
+        </p>
+      </article>
+
+      <article class="dec">
+        <div class="dec-num">19</div>
+        <div class="dec-tag">deploy</div>
+        <h4>doco-cd, não h-deploy caseiro nem Forgejo Actions nem Kamal</h4>
+        <div class="dec-vs">
+          <div class="dec-pick"><b>✓</b> doco-cd (agent-on-target, Forgejo webhook nativo, SOPS in-place)</div>
+          <div class="dec-skip"><b>✗</b> h-deploy (webhook + ansible) · Forgejo Actions (SSH out-of-band) · Kamal (não suporta compose) · Watchtower (arquivado 2025-12)</div>
+        </div>
+        <p class="dec-why">
+          Tentei três patterns antes de chegar aqui. <b>h-deploy</b> caseiro: webhook receiver + ansible playbook, funciona mas é "yet another tool" para manter — re-inventei algo que já existe.
+          <b>Forgejo Actions runner</b> num container: runner SSH'a no target ou bind-mounts path-consistent ao homed — ambos hacks (SSH out-of-band, ou path tricks frágeis no daemon).
+          <b>Kamal</b>: confirmado oficialmente que não suporta compose; é single-app via SSH.
+          <b>doco-cd</b> (kimdre/doco-cd) é literalmente o agente que iria construir: Go single-binary, Forgejo cidadão de primeira classe (<code>X-Forgejo-Signature</code> HMAC SHA-256),
+          decifra SOPS in-place por content detection (sem nomes mágicos), e resolve <i>path consistency</i> via symlink-trick no próprio container.
+          Trade-off: projecto novo (v0.x, ~1.3k★) → bus-factor real, mas substituível por h-reconciler caseiro se desaparecer (o pattern continua o mesmo).
+        </p>
+      </article>
+
+      <article class="dec">
+        <div class="dec-num">20</div>
+        <div class="dec-tag">compose</div>
+        <h4>compose.yaml (runtime) + compose.bootstrap.yaml (opt-in), não 1 file por service</h4>
+        <div class="dec-vs">
+          <div class="dec-pick"><b>✓</b> split por ciclo de vida (runtime always-on vs bootstrap opt-in) com profiles + YAML anchors</div>
+          <div class="dec-skip"><b>✗</b> 1 file por service (over-engineering) · mono-file dense · `extends:` legacy</div>
+        </div>
+        <p class="dec-why">
+          Pesquisa em 2026 (Authentik, Forgejo docs, juftin/homelab, Haxxnet/Compose-Examples): <b>nenhum repo popular splita bootstrap em files separados por service</b>. O padrão consensual é "tudo no <code>compose.yaml</code> do stack, profiles para gating".
+          <b>Mas</b> quando 1 service tem ciclo de vida divergente (tem <code>build:</code>, é opt-in, partilha state com outra stack), vale isolar num <code>compose.bootstrap.yaml</code> próprio — torna explícito que não corre em todos os <code>compose up</code>.
+          Aplicado ao <code>h-forgejo</code>: 3 services runtime (db-bootstrap, server, admin-bootstrap) no <code>compose.yaml</code> com <code>x-forgejo-image</code> + <code>x-forgejo-db-env</code> anchors para reduzir duplicação; <code>forgejo-config-bootstrap</code> (PAT+webhook via API, profile=bootstrap) isolado no <code>compose.bootstrap.yaml</code>.
+          Mesma convenção será aplicada às apps Lyzer (<code>imopush</code>, <code>meta</code>): <code>compose.yaml</code> com app + db-bootstrap + db-migrate (todos runtime); <code>compose.bootstrap.yaml</code> opcional para state externo (ex. config OIDC pre-seeded).
         </p>
       </article>
 

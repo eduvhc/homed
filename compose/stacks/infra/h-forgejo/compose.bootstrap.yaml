@@ -1,0 +1,38 @@
+# h-forgejo bootstrap — one-shot opt-in (profile=bootstrap).
+#
+# Provisiona o state externo do repo no Forgejo (PAT + webhook) via API REST
+# e deixa as credenciais num volume partilhado `h-forgejo-creds`, lido pelo
+# h-doco-cd. Corre só com `task up-bootstrap` (compose --profile bootstrap).
+#
+# Vive num file próprio (não no compose.yaml runtime) porque:
+#   1. Tem `build:` local (imagem custom alpine+curl+jq).
+#   2. Ciclo de vida diferente — só corre em bootstraps de máquina nova.
+#   3. Outputs ficam num volume partilhado consumido por outra stack (h-doco-cd).
+
+services:
+  forgejo-config-bootstrap:
+    build:
+      context: ./bootstrap
+    image: forgejo-config-bootstrap:1.0.0
+    container_name: forgejo-config-bootstrap
+    profiles: [bootstrap]
+    restart: "no"
+    depends_on:
+      forgejo-admin-bootstrap: { condition: service_completed_successfully }
+    env_file:
+      - ../../../../secrets/h-forgejo.env
+    environment:
+      FORGEJO_URL: http://h-forgejo:3000
+      REPO_OWNER: edu
+      REPO_NAME: homed
+      WEBHOOK_URL: https://deploy.iedora.com/v1/webhook
+      TOKEN_NAME: h-doco-cd
+    volumes:
+      - h-forgejo-creds:/shared
+    networks: [internal]
+
+volumes:
+  h-forgejo-creds:        # partilhado com h-doco-cd (PAT + webhook secret)
+
+networks:
+  internal: { external: true }

@@ -1,18 +1,38 @@
-# h-forgejo — git hosting + CI Actions + OCI registry (tudo num só).
+# h-forgejo — git hosting + CI Actions + OCI registry.
 #
 # Image: forgejo:15-rootless (LTS até 2027-07-15, recomendada 2026).
-# SSH server embebido (Go-based, não OpenSSH) — sem conflicto :22 da imagem.
+# SSH server embebido (Go-based, não OpenSSH) — sem conflito :22.
 #
 # Auth dual:
 #   HTTPS (qualquer lado, via tunnel CF):  https://forge.iedora.com
 #   SSH   (LAN ou Tailscale, porta 222):   git@forge.iedora.com:222/owner/repo.git
 #
 # DB: Postgres em h-postgres (DB "forgejo", role "forgejo" via h-bootstrap-db).
-# Sem Authelia: Forgejo tem auth próprio + 2FA + tokens com escopo.
+# Sem Authelia: Forgejo tem auth próprio + 2FA + OIDC client (Authelia).
+#
+# Stack runtime (3 services, todos happy-path; bootstrap one-shot do PAT/webhook
+# vive em compose.bootstrap.yaml, opt-in via profile=bootstrap):
+#   forgejo-db-bootstrap   → cria role+DB "forgejo" no h-postgres (idempotente)
+#   h-forgejo              → server, long-running
+#   forgejo-admin-bootstrap → cria admin user via forgejo CLI (idempotente)
+
+# ─── anchors: base partilhada por todos os services Forgejo ───
+x-forgejo-image: &forgejo-image codeberg.org/forgejo/forgejo:15-rootless
+
+x-forgejo-db-env: &forgejo-db-env
+  FORGEJO__database__DB_TYPE: postgres
+  FORGEJO__database__HOST: h-postgres:5432
+  FORGEJO__database__NAME: forgejo
+  FORGEJO__database__USER: forgejo
+  FORGEJO__database__SSL_MODE: disable
+
+x-forgejo-volumes: &forgejo-volumes
+  - h-forgejo-data:/var/lib/gitea
+  - ./config/app.ini:/etc/gitea/app.ini:ro
 
 services:
 
-  # ─── bootstrap one-shot: cria role + DB "forgejo" no h-postgres ───
+  # ─── one-shot: cria role + DB "forgejo" no h-postgres ───
   forgejo-db-bootstrap:
     image: h-bootstrap-db:1.0.0
     container_name: forgejo-db-bootstrap
@@ -20,15 +40,15 @@ services:
     depends_on:
       h-postgres: { condition: service_healthy }
     env_file:
-      - ../../../../secrets/h-postgres-admin.env   # PGPASSWORD do superuser
+      - ../../../../secrets/h-postgres-admin.env   # PGPASSWORD (superuser)
       - ../../../../secrets/h-forgejo.env          # FORGEJO_PASSWORD (DB pw)
     environment:
       DB: forgejo
     networks: [internal]
 
-  # ─── Forgejo server (15-rootless LTS) ───
+  # ─── server (long-running) ───
   h-forgejo:
-    image: codeberg.org/forgejo/forgejo:15-rootless
+    image: *forgejo-image
     container_name: h-forgejo
     restart: unless-stopped
     depends_on:
@@ -40,50 +60,34 @@ services:
       - ../../../../secrets/h-forgejo.env
     environment:
       TZ: Europe/Lisbon
-      # ─── overrides ao app.ini via env (FORGEJO__section__KEY) ───
-      FORGEJO__database__DB_TYPE: postgres
-      FORGEJO__database__HOST: h-postgres:5432
-      FORGEJO__database__NAME: forgejo
-      FORGEJO__database__USER: forgejo
-      # FORGEJO__database__PASSWD vem do env_file
-      FORGEJO__database__SSL_MODE: disable
-      # Server
+      <<: *forgejo-db-env
       FORGEJO__server__DOMAIN: forge.iedora.com
       FORGEJO__server__ROOT_URL: https://forge.iedora.com/
       FORGEJO__server__HTTP_PORT: "3000"
       # SSH dual: container ouve em 2222 (interno); clones anunciam :222 (host).
       FORGEJO__server__START_SSH_SERVER: "true"
       FORGEJO__server__SSH_DOMAIN: forge.iedora.com
-      FORGEJO__server__SSH_PORT: "222"           # advertised nos clone URLs
-      FORGEJO__server__SSH_LISTEN_PORT: "2222"   # bind dentro do container
-      # Headers do proxy CF/Caddy
+      FORGEJO__server__SSH_PORT: "222"
+      FORGEJO__server__SSH_LISTEN_PORT: "2222"
       FORGEJO__server__OFFLINE_MODE: "false"
-      # Service
       FORGEJO__service__DISABLE_REGISTRATION: "true"
       FORGEJO__service__REQUIRE_SIGNIN_VIEW: "false"
       FORGEJO__service__SHOW_REGISTRATION_BUTTON: "false"
-      # Actions (CI integrada)
       FORGEJO__actions__ENABLED: "true"
       FORGEJO__actions__DEFAULT_ACTIONS_URL: "https://code.forgejo.org"
-      # Packages (OCI registry built-in)
       FORGEJO__packages__ENABLED: "true"
-      # OIDC client (Authelia) — auto-cria utilizador no 1º login + linking por email/username
-      # Source: modules/setting/oauth2.go:58-83
+      # OIDC client (Authelia) — auto-cria utilizador no 1º login
       FORGEJO__oauth2_client__ENABLE_AUTO_REGISTRATION: "true"
       FORGEJO__oauth2_client__ACCOUNT_LINKING: "login"
       FORGEJO__oauth2_client__USERNAME: "preferred_username"
       FORGEJO__oauth2_client__UPDATE_AVATAR: "true"
       FORGEJO__oauth2_client__REGISTER_EMAIL_CONFIRM: "false"
-      # Segurança / install
       FORGEJO__security__INSTALL_LOCK: "true"
-      # Logs
       FORGEJO__log__MODE: console
       FORGEJO__log__LEVEL: info
     ports:
-      - "222:2222"   # SSH git: LAN/Tailscale acedem aqui; CF tunnel não passa SSH
-    volumes:
-      - h-forgejo-data:/var/lib/gitea
-      - ./config/app.ini:/etc/gitea/app.ini:ro
+      - "222:2222"
+    volumes: *forgejo-volumes
     networks: [internal, edge]
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/healthz"]
@@ -94,8 +98,36 @@ services:
     labels:
       caddy: http://forge.iedora.com
       caddy.reverse_proxy: "{{upstreams 3000}}"
-      caddy.request_body.max_size: "5GB"     # LFS / large pushes
+      caddy.request_body.max_size: "5GB"
       caddy.encode: "zstd gzip"
+
+  # ─── one-shot: cria admin user via CLI (idempotente) ───
+  forgejo-admin-bootstrap:
+    image: *forgejo-image
+    container_name: forgejo-admin-bootstrap
+    restart: "no"
+    depends_on:
+      h-forgejo: { condition: service_healthy }
+    env_file:
+      - ../../../../secrets/h-forgejo.env
+    environment:
+      <<: *forgejo-db-env
+      FORGEJO__security__INSTALL_LOCK: "true"
+    volumes: *forgejo-volumes
+    networks: [internal]
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      set -e
+      if forgejo admin user list 2>/dev/null | awk 'NR>1 {print $$2}' | grep -qx "$$FORGEJO_ADMIN_USERNAME"; then
+        echo "skip: admin '$$FORGEJO_ADMIN_USERNAME' já existe"
+      else
+        forgejo admin user create \
+          --username "$$FORGEJO_ADMIN_USERNAME" \
+          --password "$$FORGEJO_ADMIN_PASSWORD" \
+          --email    "$$FORGEJO_ADMIN_EMAIL" \
+          --admin --must-change-password=false
+        echo "✓ admin '$$FORGEJO_ADMIN_USERNAME' criado"
+      fi
 
 volumes:
   h-forgejo-data:

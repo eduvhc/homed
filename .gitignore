@@ -1,6 +1,11 @@
-# Decrypted secrets (sops descifra .env.sops -> .env em runtime)
-**/.env
-!**/.env.sops
+# Secrets — committed encriptados (sops in-place, auto-detect por conteúdo).
+# Convenção: secrets/*.env contém SOPS payload no git; `task decrypt` decifra
+# in-place para o stack local (e o doco-cd faz o mesmo num clone fresh).
+# Apenas o template do h-doco-cd e qualquer plaintext acidental fora de
+# secrets/ ficam ignorados.
+secrets/.env
+**/.env.local
+**/.env.tmp
 
 # Compose local overrides
 compose/compose.override.yaml

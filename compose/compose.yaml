@@ -9,9 +9,9 @@ include:
   - stacks/infra/h-valkey/compose.yaml
   - stacks/infra/h-auth/compose.yaml
   - stacks/infra/h-postgres/compose.yaml
-  - stacks/infra/h-deploy/compose.yaml
-  - stacks/infra/h-forgejo/compose.yaml
-  - stacks/infra/h-forgejo-runner/compose.yaml
+  - stacks/infra/h-doco-cd/compose.yaml          # GitOps agent (profile=bootstrap)
+  - stacks/infra/h-forgejo/compose.yaml          # runtime: server + db/admin bootstrap
+  - stacks/infra/h-forgejo/compose.bootstrap.yaml # opt-in: PAT/webhook (profile=bootstrap)
   - stacks/network/h-adguard/compose.yaml
   - stacks/ops/h-whoami/compose.yaml      # backend de teste para validar Caddy + Authelia
   - stacks/media/navidrome/compose.yaml
