@@ -29,8 +29,9 @@ compose/stacks/network/h-adguard/config/work/
 compose/stacks/ops/h-yt-dlp/state/
 compose/stacks/ops/h-yt-dlp/downloads/
 
-# Authelia runtime: OIDC private key (gerada on first run), session db, notification queue
+# Authelia runtime: OIDC keypair (gerada on first run), session db, notification queue
 compose/stacks/infra/h-auth/config/oidc-issuer.pem
+compose/stacks/infra/h-auth/config/oidc-issuer.public.pem
 compose/stacks/infra/h-auth/config/db.sqlite3
 compose/stacks/infra/h-auth/config/notification.txt
 

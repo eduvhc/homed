@@ -11,22 +11,24 @@ services:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
     security_opt: [ no-new-privileges:true ]
+    env_file:
+      - ../../../../secrets/h-valkey.env   # VALKEY_PASSWORD (mesma encriptada em secrets/h-auth.env)
     command:
-      - valkey-server
-      - --save
-      - "60 1"
-      - --loglevel
-      - warning
-      - --maxmemory
-      - 256mb
-      - --maxmemory-policy
-      - allkeys-lru
+      - sh
+      - -c
+      - |
+        exec valkey-server \
+          --requirepass "$$VALKEY_PASSWORD" \
+          --save "60 1" \
+          --loglevel warning \
+          --maxmemory 256mb \
+          --maxmemory-policy allkeys-lru
     volumes:
       - h-valkey-data:/data
     networks:
       - internal
     healthcheck:
-      test: [ "CMD", "valkey-cli", "ping" ]
+      test: [ "CMD-SHELL", "valkey-cli -a \"$$VALKEY_PASSWORD\" ping | grep -q PONG" ]
       interval: 5s
       timeout: 3s
       retries: 5

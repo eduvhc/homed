@@ -31,7 +31,7 @@ security:
 alerting:
   ntfy:
     url: https://ntfy.sh
-    topic: homed-eduvhc-alerts-CHANGE_ME
+    topic: ${NTFY_TOPIC}
     priority: 3
     default-alert:
       failure-threshold: 2     # 2 falhas consecutivas → alerta

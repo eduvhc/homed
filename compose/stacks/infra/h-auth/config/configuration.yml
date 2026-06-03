@@ -65,6 +65,7 @@ session:
     host: 'h-valkey'
     port: 6379
     database_index: 0      # DB 0 reservada à Authelia (outras apps usam 1+)
+    password: '${VALKEY_PASSWORD}'   # injectado via env_file (secrets/h-auth.env)
 
 regulation:
   max_retries: 3

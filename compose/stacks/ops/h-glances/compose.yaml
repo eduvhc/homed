@@ -3,23 +3,29 @@ services:
     image: nicolargo/glances:4.5.4-full
     container_name: h-glances
     restart: unless-stopped
+    security_opt: [ no-new-privileges:true ]
     logging:
       driver: json-file
       options: { max-size: "5m", max-file: "2" }
     pid: host                                  # vê processos do host (em Linux real)
-    privileged: true                           # acesso a sensores/temperatura
+    # Hardening: dropped `privileged: true` and `/:/rootfs:ro`. Sensores via
+    # explícitos /sys + /proc readonly; sem capacidade root-equivalente.
+    cap_drop: [ALL]
+    cap_add: [SYS_PTRACE]                      # ler /proc/<pid>/cmdline de outros procs
     environment:
       GLANCES_OPT: "-w --disable-webui"        # API REST em :61208/api/4/, sem UI nativa (Homepage consome JSON)
       TZ: Europe/Lisbon
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /:/rootfs:ro                           # host fs (Linux); em OrbStack vê só a VM
+      - /sys:/sys:ro                           # sensores/temperatura (hwmon)
+      - /proc:/proc:ro                         # CPU/mem/load
     networks:
-      - edge                                   # acessível por h-dashboard
+      - internal                               # tirado de `edge` (era a única exposição lateral)
     expose:
       - "61208"
-    # Não exposto via Caddy: só consumido internamente pelo Homepage.
+    # Não exposto via Caddy: só consumido internamente pelo Homepage (h-dashboard
+    # agora também tem network `internal` para chegar a h-glances).
 
 networks:
-  edge:
+  internal:
     external: true

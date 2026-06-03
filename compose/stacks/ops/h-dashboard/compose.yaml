@@ -16,7 +16,8 @@ services:
       - ./config:/app/config
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
-      - edge
+      - edge        # exposição via Caddy
+      - internal    # consumir h-glances:61208 (mudou de edge → internal por hardening)
     labels:
       caddy: http://home.iedora.com
       caddy.import: authelia
@@ -24,4 +25,6 @@ services:
 
 networks:
   edge:
+    external: true
+  internal:
     external: true
