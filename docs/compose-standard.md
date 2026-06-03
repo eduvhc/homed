@@ -92,12 +92,10 @@ engine que consome os outputs dos `backups.yaml`.
     eixo *funcional* (não taxonómico): e.g., `compose/lyzer.yaml` para o
     monorepo Lyzer (apps comerciais), root para infra+ops do homed.
 
-## Excepções documentadas ao cap 80L
+## Excepções ao cap 80L
 
-- `h-restic/runtime.yaml` (~75L): 3 restic services partilham `x-restic-base`.
-  Aceito — anchors file-scoped.
-
-Todos os outros files ≤80L. Se passar, refactor (shell → custom image,
+**Nenhuma.** Pós-refactor de h-restic para single-container (supercronic),
+todos os composes estão ≤58L. Se passar, refactor (shell → custom image,
 serviços não relacionados → fragments).
 
 ## Shell em composes

@@ -1,0 +1,5 @@
+# h-restic schedule — supercronic 5-field cron (sem segundos).
+# Container TZ=Europe/Lisbon. Endpoints deadman registados no Gatus.
+0 2 * * * /usr/local/bin/entrypoint.sh backup   # daily 02:00
+0 3 * * 0 /usr/local/bin/entrypoint.sh check    # Sun 03:00 (5% sample)
+0 4 * * 0 /usr/local/bin/entrypoint.sh forget   # Sun 04:00 (retention)
