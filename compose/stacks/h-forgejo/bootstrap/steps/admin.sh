@@ -4,16 +4,15 @@
 #   cmd/main.go:67           (--config global flag)
 #   cmd/admin_user_create.go (--admin --must-change-password)
 #   cmd/admin_user_change_username.go (--username --new-username)
-# Why --config: substituímos o ENTRYPOINT da image base; o
-# docker-entrypoint.sh original setup env vars (GITEA_WORK_DIR etc).
-# Sem --config, forgejo CLI falha com "Unable to load config file".
+# CONFIG path: canónico do upstream (Dockerfile.rootless:106), partilhado com
+# o runtime via volume h-forgejo-data — mesmo file, mesma DB.
 set -eu
 
 : "${FORGEJO_ADMIN_USERNAME:?}"
 : "${FORGEJO_ADMIN_PASSWORD:?}"
 : "${FORGEJO_ADMIN_EMAIL:?}"
 
-CONFIG="${APP_INI:-/etc/gitea/app.ini}"
+CONFIG=/var/lib/gitea/custom/conf/app.ini
 HAS_USER() { forgejo --config "$CONFIG" admin user list 2>/dev/null | awk 'NR>1 {print $2}' | grep -qx "$1"; }
 
 # Migração declarativa idempotente: se FORGEJO_ADMIN_PREVIOUS_USERNAME existe

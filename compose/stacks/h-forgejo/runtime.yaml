@@ -1,5 +1,8 @@
 # h-forgejo runtime — server long-running.
-# Config em ./config/app.ini (single source of truth). Env: só TZ + PASSWD (env_file).
+# Config: app.ini seeded para /var/lib/gitea/custom/conf/app.ini (volume)
+# pelo forgejo-app-ini-bootstrap. Env-to-ini (docker-setup.sh:51) aplica
+# FORGEJO__* env vars in-place. INTERNAL_TOKEN/SECRET_KEY auto-gerados
+# pelo Forgejo no 1º boot (security.go:244-260) — persistem no volume.
 # Auth dual: HTTPS via Caddy/CF tunnel, SSH host:222 → container:2222.
 
 services:
@@ -9,7 +12,8 @@ services:
     restart: unless-stopped
     security_opt: [ no-new-privileges:true ]
     depends_on:
-      forgejo-db-bootstrap: { condition: service_completed_successfully }
+      forgejo-db-bootstrap:      { condition: service_completed_successfully }
+      forgejo-app-ini-bootstrap: { condition: service_completed_successfully }
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
@@ -21,7 +25,6 @@ services:
       - "222:2222"
     volumes:
       - h-forgejo-data:/var/lib/gitea
-      - ./config/app.ini:/etc/gitea/app.ini:ro
     networks: [internal, edge]
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/healthz"]

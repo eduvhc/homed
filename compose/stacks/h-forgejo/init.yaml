@@ -1,11 +1,11 @@
-# h-forgejo init — one-shot containers, idempotentes, em cada `up`.
-# Config (DB conn, INSTALL_LOCK, etc) vem de ./config/app.ini montado.
-# Shell extraído para image custom forgejo-bootstrap (multiplex por BOOTSTRAP_STEP).
-# Ver bootstrap/{Dockerfile,bootstrap.sh,steps/}.
+# h-forgejo init — one-shot containers, idempotentes.
+# Source: ./config/app.ini é seeded para /var/lib/gitea/custom/conf/app.ini
+# (path canónico do Dockerfile.rootless:106) pelo forgejo-app-ini-bootstrap.
+# Shell extraído para image custom forgejo-bootstrap (multiplex BOOTSTRAP_STEP).
 
-x-forgejo-volumes: &forgejo-volumes
+# Volume base usado pelos steps CLI (admin/oidc) — partilha state com runtime.
+x-forgejo-data: &forgejo-data
   - h-forgejo-data:/var/lib/gitea
-  - ./config/app.ini:/etc/gitea/app.ini:ro
 
 services:
   # cria role + DB "forgejo" no h-postgres (image genérica reusable)
@@ -22,9 +22,24 @@ services:
       DB: forgejo
     networks: [internal]
 
-  # cria 1º admin (CLI; build: aqui → docker compose auto-build em up)
-  forgejo-admin-bootstrap:
+  # seed do app.ini para o path canónico (volume writable; idempotente via hash).
+  # Build aqui (1ª service do stack a referenciar a image; outros reusam).
+  forgejo-app-ini-bootstrap:
     build: ./bootstrap
+    image: forgejo-bootstrap:2.0.0
+    container_name: forgejo-app-ini-bootstrap
+    restart: "no"
+    depends_on:
+      forgejo-db-bootstrap: { condition: service_completed_successfully }
+    environment:
+      BOOTSTRAP_STEP: app-ini
+    volumes:
+      - h-forgejo-data:/var/lib/gitea
+      - ./config/app.ini:/etc/gitea/app.ini.source:ro
+    networks: [internal]
+
+  # cria 1º admin (CLI)
+  forgejo-admin-bootstrap:
     image: forgejo-bootstrap:2.0.0
     container_name: forgejo-admin-bootstrap
     restart: "no"
@@ -37,10 +52,10 @@ services:
       # Migração idempotente: se admin "edu" existe (de bootstrap anterior),
       # renomeia para FORGEJO_ADMIN_USERNAME atual. Pós-rename vira no-op.
       FORGEJO_ADMIN_PREVIOUS_USERNAME: edu
-    volumes: *forgejo-volumes
+    volumes: *forgejo-data
     networks: [internal]
 
-  # regista Authelia OIDC source (CLI; reusa image construída acima)
+  # regista Authelia OIDC source (CLI)
   forgejo-oidc-bootstrap:
     image: forgejo-bootstrap:2.0.0
     container_name: forgejo-oidc-bootstrap
@@ -54,7 +69,7 @@ services:
       OIDC_SOURCE_NAME: authelia
       OIDC_CLIENT_ID: forgejo
       OIDC_DISCOVERY_URL: https://auth.iedora.com/.well-known/openid-configuration
-    volumes: *forgejo-volumes
+    volumes: *forgejo-data
     networks: [internal]
 
 networks:
