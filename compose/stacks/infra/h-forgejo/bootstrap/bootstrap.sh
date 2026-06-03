@@ -16,6 +16,7 @@ set -eu
 : "${WEBHOOK_URL:?WEBHOOK_URL obrigatório}"
 : "${TOKEN_NAME:=h-doco-cd}"
 : "${WEBHOOK_BRANCH:=main}"
+: "${UPSTREAM_REPO:?UPSTREAM_REPO obrigatório (ex.: https://github.com/eduvhc/homed.git)}"
 
 SHARED=/shared
 mkdir -p "$SHARED"
@@ -33,12 +34,20 @@ until curl -fsS "$FORGEJO_URL/api/healthz" >/dev/null 2>&1; do
   sleep 1
 done
 
-# 1. Verifica que o repo existe (assume já foi pushed). Se não, falha rápido
-# com mensagem clara para o operador empurrar o working tree primeiro.
-if ! api -o /dev/null -w '%{http_code}' "$FORGEJO_URL/api/v1/repos/$REPO_OWNER/$REPO_NAME" | grep -q '^200$'; then
-  echo "✗ repo $REPO_OWNER/$REPO_NAME não existe no Forgejo."
-  echo "  faz primeiro: git push -u origin main para forge.iedora.com/$REPO_OWNER/$REPO_NAME"
-  exit 1
+# 1. Garante que o repo existe — importa do upstream público se ainda não.
+# Idempotente: 200 = repo existe (skip), caso contrário POST /repos/migrate.
+if api -o /dev/null -w '%{http_code}' "$FORGEJO_URL/api/v1/repos/$REPO_OWNER/$REPO_NAME" 2>/dev/null | grep -q '^200$'; then
+  echo "skip: repo $REPO_OWNER/$REPO_NAME já existe"
+else
+  echo "→ importing $UPSTREAM_REPO → $REPO_OWNER/$REPO_NAME"
+  api -X POST "$FORGEJO_URL/api/v1/repos/migrate" \
+    -d "$(jq -nc \
+      --arg url "$UPSTREAM_REPO" \
+      --arg owner "$REPO_OWNER" \
+      --arg name "$REPO_NAME" \
+      '{clone_addr:$url, repo_owner:$owner, repo_name:$name, mirror:false, private:false, description:"homelab declarativo · imported from upstream"}')" \
+    >/dev/null
+  echo "✓ repo importado de $UPSTREAM_REPO"
 fi
 
 # 2. PAT — sempre regenera se o volume não tem (handle volume reset gracefully)

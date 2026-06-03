@@ -27,6 +27,7 @@ services:
       REPO_NAME: homed
       WEBHOOK_URL: https://deploy.iedora.com/v1/webhook
       TOKEN_NAME: h-doco-cd
+      UPSTREAM_REPO: https://github.com/eduvhc/homed.git
     volumes:
       - h-forgejo-creds:/shared
     networks: [internal]
