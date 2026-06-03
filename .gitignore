@@ -10,9 +10,8 @@ secrets/.env
 # Compose local overrides
 compose/compose.override.yaml
 
-# Tofu
+# Tofu — .terraform.lock.hcl É committado (provider pinning multi-platform).
 tofu/.terraform/
-tofu/.terraform.lock.hcl
 tofu/*.tfstate
 tofu/*.tfstate.backup
 tofu/crash.log

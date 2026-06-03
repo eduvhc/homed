@@ -3,6 +3,13 @@ resource "cloudflare_r2_bucket" "backups" {
   name          = var.r2_bucket_name
   location      = var.r2_location
   storage_class = "Standard"
+
+  lifecycle {
+    # Bucket guarda restic backups E o tofu state. Destroy = catastrófico
+    # (perdes state + dump dos secrets/dbs). Para destruir intencionalmente,
+    # remover este bloco primeiro, apply, depois destroy.
+    prevent_destroy = true
+  }
 }
 
 # Lifecycle: Restic gere retention internamente via `forget --prune`.

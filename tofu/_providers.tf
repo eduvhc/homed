@@ -1,5 +1,7 @@
 terraform {
-  required_version = ">= 1.10"
+  # ≥ 1.12: state encryption GA + use_lockfile + dynamic prevent_destroy.
+  # < 2.0 protege contra major version bumps que partem syntax.
+  required_version = ">= 1.12, < 2.0"
 
   required_providers {
     cloudflare = {
