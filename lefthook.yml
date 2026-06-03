@@ -24,3 +24,13 @@ pre-commit:
           fi
         done
         exit $fail
+
+    tofu-fmt:
+      glob: "tofu/*.tf"
+      # Idempotente — só falha se houver diff. Mesma check do CI.
+      run: tofu -chdir=tofu fmt -check -diff
+
+    ansible-syntax:
+      glob: "ansible/*.yml"
+      # syntax-check valida YAML + estrutura. Mesma check do CI.
+      run: ansible-playbook --syntax-check -i ansible/inventory.yml ansible/provision.yml
