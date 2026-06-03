@@ -21,7 +21,7 @@ tasks:
 
   up:
     desc: Decifra secrets e arranca o stack (sem profile bootstrap)
-    deps: [decrypt, networks]
+    deps: [decrypt, networks, build-h-yt-dlp]
     cmd: "{{.COMPOSE}} up -d"
 
   up-bootstrap:
@@ -33,12 +33,26 @@ tasks:
       - decrypt
       - networks
       - build-bootstrap-db
-      - build-forgejo-config-bootstrap
+      - build-forgejo-bootstrap
     cmd: COMPOSE_PROFILES=bootstrap {{.COMPOSE}} up -d --wait
 
-  build-forgejo-config-bootstrap:
-    desc: Build local da imagem forgejo-config-bootstrap (idempotente)
-    cmd: docker build -q -t forgejo-config-bootstrap:1.0.0 compose/stacks/infra/h-forgejo/bootstrap > /dev/null
+  validate:
+    desc: Valida a árvore de composes (sem subir nada — pode correr a frio)
+    cmd: "{{.COMPOSE}} --profile bootstrap config -q"
+    silent: true
+
+  build-forgejo-bootstrap:
+    desc: Build local da imagem forgejo-bootstrap (multiplex admin/oidc/config)
+    sources:
+      - compose/stacks/h-forgejo/bootstrap/**/*
+    cmd: docker build -t forgejo-bootstrap:2.0.0 compose/stacks/h-forgejo/bootstrap
+
+  build-h-yt-dlp:
+    desc: Build local da image homed/h-yt-dlp:2.0.0 (re-correr quando Dockerfile muda)
+    sources:
+      - compose/stacks/h-yt-dlp/Dockerfile
+      - compose/stacks/h-yt-dlp/scripts/**/*
+    cmd: docker build -t homed/h-yt-dlp:2.0.0 compose/stacks/h-yt-dlp
 
   down:
     desc: Pára o stack (decrypted .env files ficam no disco)
@@ -64,6 +78,7 @@ tasks:
         if ! grep -qE 'sops[:_]' "$f"; then
           sops -e -i --input-type dotenv --output-type dotenv "$f"
         fi
+        chmod 600 "$f"
       done
       true
     silent: true
@@ -77,8 +92,11 @@ tasks:
 
   build-bootstrap-db:
     desc: Build local h-bootstrap-db image (re-correr sempre que run.sh muda)
+    sources:
+      - compose/stacks/h-bootstrap-db/Dockerfile
+      - compose/stacks/h-bootstrap-db/run.sh
     cmds:
-      - docker build -t h-bootstrap-db:1.0.0 compose/stacks/infra/h-bootstrap-db
+      - docker build -t h-bootstrap-db:1.0.0 compose/stacks/h-bootstrap-db
 
   deploy-logs:
     desc: Tail dos logs do agente doco-cd
@@ -100,7 +118,8 @@ tasks:
     cmds:
       - test -f secrets/{{.NAME}}.env
       - sops -e -i --input-type dotenv --output-type dotenv secrets/{{.NAME}}.env
-      - echo "✓ secrets/{{.NAME}}.env encriptado in-place"
+      - chmod 600 secrets/{{.NAME}}.env
+      - echo "✓ secrets/{{.NAME}}.env encriptado in-place (mode 600)"
 
   rotate:
     desc: Re-encripta todos os secrets com a lista atual de recipients em .sops.yaml
@@ -162,32 +181,11 @@ tasks:
 
   _tofu:
     desc: |
-      Internal — tofu wrapper cross-OS. Lê CLOUDFLARE_API_TOKEN e
-      HOMED_TOFU_ENCRYPTION via Bitwarden Secrets Manager (bws CLI).
-      Pré-req no operador (uma vez por máquina): bws instalado + env vars
-      BWS_ACCESS_TOKEN e HOMED_BWS_PROJECT_ID exportadas.
+      Internal — tofu wrapper cross-OS via scripts/tofu-wrapper.sh.
+      Lê CLOUDFLARE_API_TOKEN e HOMED_TOFU_ENCRYPTION do Bitwarden
+      Secrets Manager. Pré-req: bws + BWS_ACCESS_TOKEN + HOMED_BWS_PROJECT_ID.
     requires: { vars: [CMD] }
-    cmds:
-      - |
-        set -eu
-        command -v bws >/dev/null 2>&1 \
-          || { echo "✗ bws CLI não instalado. https://bitwarden.com/help/secrets-manager-cli/"; exit 1; }
-        command -v jq  >/dev/null 2>&1 \
-          || { echo "✗ jq não instalado. (apt install jq | brew install jq | winget install stedolan.jq)"; exit 1; }
-        : "${BWS_ACCESS_TOKEN:?export BWS_ACCESS_TOKEN=<machine-account-token>}"
-        : "${HOMED_BWS_PROJECT_ID:?export HOMED_BWS_PROJECT_ID=<project-uuid>}"
-
-        bws run --project-id "$HOMED_BWS_PROJECT_ID" -- '
-          : "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN não está no projecto bws}"
-          : "${HOMED_TOFU_ENCRYPTION:?HOMED_TOFU_ENCRYPTION não está no projecto bws}"
-          export TF_VAR_cf_api_token="$CLOUDFLARE_API_TOKEN"
-          export TF_VAR_cf_account_id=$(curl -sfH "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-            https://api.cloudflare.com/client/v4/accounts | jq -r ".result[0].id")
-          export TF_VAR_cf_zone_id=$(curl -sfH "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-            "https://api.cloudflare.com/client/v4/zones?name=iedora.com" | jq -r ".result[0].id")
-          export TF_VAR_encryption_passphrase="$HOMED_TOFU_ENCRYPTION"
-          cd tofu && tofu {{.CMD}}
-        '
+    cmd: ./scripts/tofu-wrapper.sh {{.CMD}}
 
   tofu-init:
     desc: 'Inicializa providers do Tofu'
@@ -202,10 +200,13 @@ tasks:
     cmds: [{ task: _tofu, vars: { CMD: 'apply -auto-approve' } }]
 
   tofu-sync-secrets:
-    desc: 'Lê tunnel_token do tofu, escreve secrets/h-cloudflared.env encriptado'
+    desc: 'Lê tunnel_token do tofu, escreve secrets/h-cloudflared.env encriptado (sem plaintext em disco entre passos)'
     cmd: |
-      echo "TUNNEL_TOKEN=$(task _tofu CMD='output -raw tunnel_token')" > secrets/h-cloudflared.env
-      sops -e -i --input-type dotenv --output-type dotenv secrets/h-cloudflared.env
+      set -eu
+      tmp=$(mktemp)
+      trap 'rm -f "$tmp"' EXIT
+      echo "TUNNEL_TOKEN=$(./scripts/tofu-wrapper.sh output -raw tunnel_token)" > "$tmp"
+      sops -e --input-type dotenv --output-type dotenv "$tmp" > secrets/h-cloudflared.env
 
   provision:
     desc: 'Bootstrap declarativo da máquina (Debian 12). Idempotente.'

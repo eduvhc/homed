@@ -1,0 +1,58 @@
+# h-forgejo init — one-shot containers, idempotentes, em cada `up`.
+# Config (DB conn, INSTALL_LOCK, etc) vem de ./config/app.ini montado.
+# Shell extraído para image custom forgejo-bootstrap (multiplex por BOOTSTRAP_STEP).
+# Ver bootstrap/{Dockerfile,bootstrap.sh,steps/}.
+
+x-forgejo-volumes: &forgejo-volumes
+  - h-forgejo-data:/var/lib/gitea
+  - ./config/app.ini:/etc/gitea/app.ini:ro
+
+services:
+  # cria role + DB "forgejo" no h-postgres (image genérica reusable)
+  forgejo-db-bootstrap:
+    image: h-bootstrap-db:1.0.0
+    container_name: forgejo-db-bootstrap
+    restart: "no"
+    depends_on:
+      h-postgres: { condition: service_healthy }
+    env_file:
+      - ../../../secrets/h-postgres-admin.env
+      - ../../../secrets/h-forgejo.env
+    environment:
+      DB: forgejo
+    networks: [internal]
+
+  # cria 1º admin (CLI; build: aqui → docker compose auto-build em up)
+  forgejo-admin-bootstrap:
+    build: ./bootstrap
+    image: forgejo-bootstrap:2.0.0
+    container_name: forgejo-admin-bootstrap
+    restart: "no"
+    depends_on:
+      h-forgejo: { condition: service_healthy }
+    env_file:
+      - ../../../secrets/h-forgejo.env
+    environment:
+      BOOTSTRAP_STEP: admin
+    volumes: *forgejo-volumes
+    networks: [internal]
+
+  # regista Authelia OIDC source (CLI; reusa image construída acima)
+  forgejo-oidc-bootstrap:
+    image: forgejo-bootstrap:2.0.0
+    container_name: forgejo-oidc-bootstrap
+    restart: "no"
+    depends_on:
+      forgejo-admin-bootstrap: { condition: service_completed_successfully }
+    env_file:
+      - ../../../secrets/h-forgejo.env
+    environment:
+      BOOTSTRAP_STEP: oidc
+      OIDC_SOURCE_NAME: authelia
+      OIDC_CLIENT_ID: forgejo
+      OIDC_DISCOVERY_URL: https://auth.iedora.com/.well-known/openid-configuration
+    volumes: *forgejo-volumes
+    networks: [internal]
+
+networks:
+  internal: { external: true }

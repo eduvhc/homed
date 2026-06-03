@@ -1,0 +1,26 @@
+services:
+  h-yt-dlp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: homed/h-yt-dlp:2.0.0           # bump major: crond → supercronic (runtime arch mudou)
+    container_name: h-yt-dlp
+    restart: unless-stopped
+    security_opt: [ no-new-privileges:true ]
+    cap_drop: [ALL]
+    user: "1000:1000"
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    environment:
+      TZ: Europe/Lisbon
+    volumes:
+      - ./config:/config                                # playlists.txt, yt-dlp.conf, archive.txt
+      - ../../../data/media/music:/music                # mesma árvore que Navidrome lê
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep supercronic > /dev/null"]
+      interval: 1m
+      timeout: 5s
+      retries: 2
+      start_period: 10s
+    # Sem network necessária — só faz outbound HTTPS para YouTube

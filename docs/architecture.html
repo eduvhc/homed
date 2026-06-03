@@ -926,16 +926,17 @@
       <article class="mini">
         <header><span class="mini-tag">tema 02</span><h4>Backup automático</h4></header>
         <p class="mini-lead">
-          Todas as noites o <b>h-restic-backup</b> tira um snapshot encriptado
-          (configs, secrets, biblioteca de música) e envia para o <b>R2</b> da Cloudflare.
+          Modelo <b>decoupled</b>: cada app declara <i>o que</i> backupar no seu próprio <code>backups.yaml</code>
+          e escreve para <code>/data/&lt;svc&gt;/</code>. O <b>h-restic-backup</b> monta <code>/data</code> umbrella,
+          encripta client-side e envia para o <b>R2</b> da Cloudflare (02:00).
           Ao Domingo verifica integridade e aplica retention.
         </p>
         <svg viewBox="0 0 360 220" class="mini-svg">
           <defs><marker id="ma2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#c8341d"/></marker></defs>
           <g>
             <rect x="20" y="20" width="140" height="56" class="m-box m-ops"/>
-            <text x="32" y="44" class="m-name">/source (ro)</text>
-            <text x="32" y="62" class="m-sub">secrets · configs · music</text>
+            <text x="32" y="44" class="m-name">/data (ro)</text>
+            <text x="32" y="62" class="m-sub">umbrella · /data/&lt;svc&gt;/</text>
           </g>
           <g>
             <rect x="20" y="92" width="140" height="56" class="m-box m-ops"/>
@@ -1015,7 +1016,7 @@
           <g>
             <rect x="190" y="20" width="160" height="80" class="m-box m-ctrl"/>
             <text x="202" y="46" class="m-name">tofu</text>
-            <text x="202" y="64" class="m-sub">8 .tf</text>
+            <text x="202" y="64" class="m-sub">7 .tf</text>
             <text x="202" y="80" class="m-sub">cria CF DNS</text>
             <text x="202" y="96" class="m-sub">+ tunnel + R2</text>
           </g>
@@ -1106,11 +1107,13 @@
       <article class="mini wide">
         <header><span class="mini-tag">tema 06</span><h4>Como cada <code>git push</code> chega aos containers (sem UI manual)</h4></header>
         <p class="mini-lead">
-          Bootstrap declarativo em três init containers idempotentes:
+          Bootstrap declarativo em três init containers idempotentes que partilham uma <b>custom image multiplex</b> (<code>forgejo-bootstrap:2.0.0</code>, base forgejo + curl/jq) — selectionada por env <code>BOOTSTRAP_STEP=admin|oidc|config</code>:
           <code>forgejo-admin-bootstrap</code> cria o admin user (CLI),
+          <code>forgejo-oidc-bootstrap</code> regista o OIDC application,
           <code>forgejo-config-bootstrap</code> gera PAT + webhook via API REST e escreve-os
           num volume partilhado <code>h-forgejo-creds</code>,
           <code>h-doco-cd</code> lê-os via <code>*_FILE</code> envs.
+          Padrão consistente com o standard (≤10L shell inline; multi-step → custom image).
           <code>SOPS_AGE_KEY</code> entra como Docker secret bind do <code>~/.config/sops/age/keys.txt</code>.
           Resultado: <code>task up-bootstrap</code> é o único comando humano.
         </p>
@@ -1295,13 +1298,13 @@
         <h4>Secrets centralizados, não per-service</h4>
         <div class="dec-vs">
           <div class="dec-pick"><b>✓</b> <code>~/homed/secrets/*.env.sops</code></div>
-          <div class="dec-skip"><b>✗</b> secret dentro de <code>stacks/h-X/.env.sops</code></div>
+          <div class="dec-skip"><b>✗</b> secret dentro de <code>stacks/&lt;svc&gt;/.env.sops</code></div>
         </div>
         <p class="dec-why">
           <b>Single Responsibility:</b> secrets não fazem parte da definição de um serviço —
           são injectados em runtime. Manter num só sítio dá: rotação fácil
           (um <code>task rotate</code>), auditoria simples (<code>ls secrets/</code>),
-          backup óbvio. Custo: paths feios <code>../../../../secrets/</code> nos compose files.
+          backup óbvio. Custo: paths feios <code>../../../secrets/</code> nos fragments (3-up: <code>stacks/&lt;svc&gt;/file.yaml</code> → root).
           Vale a pena.
         </p>
       </article>
@@ -1445,7 +1448,7 @@
         <p class="dec-why">
           Drizzle pode continuar como ORM/query-builder de runtime — não é problema do homed.
           Para <b>migrations versionadas</b> a ferramenta canónica é <code>dbmate</code> (SQL puro, 1 ficheiro por migration, idempotente).
-          Bootstrap (CREATE ROLE+DATABASE) é o passo que o dbmate não faz: pre-requisito num container caseiro mínimo (15 linhas de shell, idempotente).
+          Bootstrap (CREATE ROLE+DATABASE) é o passo que o dbmate não faz: pre-requisito numa <b>imagem caseira genérica e reusable</b> (<code>h-bootstrap-db:1.0.0</code>, postgres:17-alpine + run.sh idempotente) — uma imagem, N invocações (cada app instancia como <code>&lt;app&gt;-db-bootstrap</code>).
           Pattern: <code>bootstrap → migrate → app</code> ligado por <code>service_completed_successfully</code>.
           Resultado: <code>docker compose up</code> sobe tudo do zero numa máquina nova, sem intervenção humana.
         </p>
@@ -1472,22 +1475,22 @@
       <article class="dec">
         <div class="dec-num">20</div>
         <div class="dec-tag">compose</div>
-        <h4>compose.yaml (runtime) + compose.bootstrap.yaml (opt-in), não 1 file por service</h4>
+        <h4>Layout flat por serviço + fragments por concern, não 1 file por service nem categorias</h4>
         <div class="dec-vs">
-          <div class="dec-pick"><b>✓</b> split por ciclo de vida (runtime always-on vs bootstrap opt-in) com profiles + YAML anchors</div>
-          <div class="dec-skip"><b>✗</b> 1 file por service (over-engineering) · mono-file dense · `extends:` legacy</div>
+          <div class="dec-pick"><b>✓</b> <code>stacks/&lt;svc&gt;/</code> flat (entry <code>compose.yaml</code> + <code>runtime.yaml</code> · <code>init.yaml</code> · <code>backups.yaml</code> · <code>compose.bootstrap.yaml</code>)</div>
+          <div class="dec-skip"><b>✗</b> 1 file por service (mono-file dense) · categorias <code>infra/ops/arr/</code> (confusão de domínios) · <code>extends:</code> legacy</div>
         </div>
         <p class="dec-why">
-          Pesquisa em 2026 (Authentik, Forgejo docs, juftin/homelab, Haxxnet/Compose-Examples): <b>nenhum repo popular splita bootstrap em files separados por service</b>. O padrão consensual é "tudo no <code>compose.yaml</code> do stack, profiles para gating".
-          <b>Mas</b> quando 1 service tem ciclo de vida divergente, vale isolar num <code>compose.bootstrap.yaml</code> próprio — torna explícito que não corre em todos os <code>compose up</code>.
+          Pesquisa em 2026 (Authentik, Forgejo docs, juftin/homelab, Haxxnet/Compose-Examples): <b>nenhum repo popular splita bootstrap em files separados por service</b>. O padrão consensual é "tudo no <code>compose.yaml</code> do stack, profiles para gating". Aqui foi mais longe: <i>cada concern do serviço</i> vive no seu próprio fragment, com <b>cap de 80 LoC</b> por file (ver <code>docs/compose-standard.md</code>).
         </p>
         <p class="dec-why">
-          <b>Regra operacional</b> — vai para <code>compose.bootstrap.yaml</code> quando cumprir <b>≥2 de 4</b>: tem <code>build:</code> · está sob <code>profiles: [bootstrap]</code> · partilha state cross-stack (volume consumido por outra stack) · só faz trabalho útil em máquinas novas.
-          O ciclo de vida (one-shot vs long-running) <b>não é critério</b> — um agente long-running cuja existência depende de outro service bootstrap legitima a entrada no ficheiro.
+          <b>Sem categorias intermédias</b> — <code>infra/</code>, <code>ops/</code>, <code>arr/</code> criam confusão de domínios (e.g., backup do Postgres acabaria em <code>ops/</code>, mas o owner é <code>h-postgres</code>). Cada serviço é o seu próprio domínio: <code>h-postgres/backups.yaml</code> (pg_dumpall), não <code>ops/postgres-dump/</code>.
         </p>
         <p class="dec-why">
-          Aplicações: <code>h-forgejo</code> → <code>forgejo-config-bootstrap</code> em <code>compose.bootstrap.yaml</code> (4/4: build + profile + cross-stack volume + new-machine); <code>h-doco-cd</code> → o agente vive em <code>compose.bootstrap.yaml</code> (3/4: profile + cross-stack <code>h-forgejo-creds</code> + new-machine), apesar de <code>restart: unless-stopped</code>;
-          <code>forgejo-{db,admin,oidc}-bootstrap</code> e <code>h-auth-key-bootstrap</code>, <code>h-navidrome-perms</code> ficam no runtime <code>compose.yaml</code> (1/4 cada — só new-machine).
+          <b>Regra operacional</b> — entra em <code>compose.bootstrap.yaml</code> quando cumprir <b>≥2 de 4 critérios funcionais</b>: é um runtime long-running (não one-shot) · é etapa de bootstrap (PAT, webhook, seed) · partilha state cross-stack (volume consumido por outra stack) · só faz trabalho útil em máquinas novas. <code>build:</code> e ciclo de vida (one-shot vs long-running) <b>não são critério isolado</b> — o que conta é a função.
+        </p>
+        <p class="dec-why">
+          Aplicações: <code>h-forgejo</code> → <code>forgejo-config-bootstrap</code> em <code>compose.bootstrap.yaml</code> (bootstrap + cross-stack volume <code>h-forgejo-creds</code> + new-machine = 3/4); <code>h-doco-cd</code> → agente vive em <code>compose.bootstrap.yaml</code> (runtime long-running + cross-stack consumer + new-machine = 3/4); <code>forgejo-{db,admin,oidc}-bootstrap</code>, <code>h-auth-key-bootstrap</code> e <code>h-navidrome-perms</code> ficam em <code>init.yaml</code> (só new-machine = 1/4).
         </p>
       </article>
 
@@ -1498,7 +1501,7 @@
   <section class="catalog">
     <header class="catalog-head">
       <h3>Papel de cada serviço</h3>
-      <p>17 containers, agrupados pelo que fazem. Cada um existe por uma razão precisa — se removeres um, percebes o que perdes.</p>
+      <p>18 stacks (+ 1 imagem partilhada <code>h-bootstrap-db</code>), agrupados pelo que fazem. Layout flat em <code>compose/stacks/&lt;svc&gt;/</code>. Cada um existe por uma razão precisa — se removeres um, percebes o que perdes.</p>
     </header>
 
     <!-- ─── INFRA ─── -->
@@ -1616,7 +1619,7 @@
             <span class="svc-name">h-postgres-dump</span>
             <span class="svc-ver">prodrigestivill:17</span>
           </div>
-          <p class="svc-role">Sidecar que faz <code>pg_dumpall</code> diário (01:00) para <code>data/postgres-dumps/</code>. O h-restic-backup apanha os dumps no snapshot das 02:00 e empurra-os encriptados para R2.</p>
+          <p class="svc-role">Sidecar declarado em <code>h-postgres/backups.yaml</code> — backup é concern do próprio serviço, não cross-cutting. Faz <code>pg_dumpall</code> diário (01:00) para <code>/data/h-postgres/</code>. O h-restic engine apanha tudo o que está em <code>/data/</code> no snapshot das 02:00 e empurra para R2.</p>
           <dl class="svc-meta">
             <dt>Cron</dt><dd><code>0 1 * * *</code> (1h antes do restic)</dd>
             <dt>Retention local</dt><dd>7d / 4w / 1m</dd>
@@ -1629,7 +1632,7 @@
             <span class="svc-name">h-bootstrap-db <em>(imagem, não service)</em></span>
             <span class="svc-ver">1.0.0 · postgres:17-alpine + run.sh</span>
           </div>
-          <p class="svc-role">Imagem caseira construída em <code>compose/stacks/infra/h-bootstrap-db/</code>. Cada app instancia-a como <code>&lt;app&gt;-db-bootstrap</code>: lê <code>DB</code> + <code>&lt;APP&gt;_PASSWORD</code>, cria ROLE+DATABASE no h-postgres, sai. Idempotente (guards <code>NOT EXISTS</code>).</p>
+          <p class="svc-role">Imagem caseira construída em <code>compose/stacks/h-bootstrap-db/</code>. Cada app instancia-a como <code>&lt;app&gt;-db-bootstrap</code>: lê <code>DB</code> + <code>&lt;APP&gt;_PASSWORD</code>, cria ROLE+DATABASE no h-postgres, sai. Idempotente (guards <code>NOT EXISTS</code>).</p>
           <dl class="svc-meta">
             <dt>Build</dt><dd><code>task build-bootstrap-db</code></dd>
             <dt>Convive com</dt><dd>dbmate (sidecar seguinte que aplica os SQLs como dono da DB)</dd>
@@ -1689,10 +1692,11 @@
         </article>
 
         <article class="svc">
-          <div class="svc-head"><span class="svc-name">h-yt-dlp</span></div>
-          <p class="svc-role">Plano B do pipeline Arr. Sync diário (04:00) de playlists para a biblioteca de música.</p>
+          <div class="svc-head"><span class="svc-name">h-yt-dlp</span><span class="svc-ver">homed/h-yt-dlp:2.0.0</span></div>
+          <p class="svc-role">Plano B do pipeline Arr. Imagem custom (<code>python:3.14-alpine</code> + <b>supercronic v0.2.46</b>) — cron rootless com <code>cap_drop: ALL</code>. Bumped a major (1.0.0 → 2.0.0): busybox crond foi substituído por supercronic (runtime arch mudou).</p>
           <dl class="svc-meta">
             <dt>Output</dt><dd><code>data/media/music/</code></dd>
+            <dt>Cron</dt><dd>daily 04:00 (supercronic → stdout)</dd>
             <dt>Pinga</dt><dd>gatus (deadman heartbeat)</dd>
           </dl>
         </article>
@@ -1711,9 +1715,9 @@
 
         <article class="svc">
           <div class="svc-head"><span class="svc-name">h-restic-backup</span><span class="svc-ver">mazzolino 1.8.2</span></div>
-          <p class="svc-role">Snapshot incremental diário (02:00). Encripta client-side e empurra para o R2.</p>
+          <p class="svc-role">Snapshot incremental diário (02:00). Encripta client-side e empurra para R2. Engine <b>decoupled</b>: monta <code>/data</code> umbrella (ro) — apps escrevem para <code>/data/&lt;svc&gt;/</code> e h-restic snapshota tudo. Adicionar serviço novo não toca em h-restic.</p>
           <dl class="svc-meta">
-            <dt>Lê (ro)</dt><dd>secrets · stacks · music · postgres-dumps · valkey-data</dd>
+            <dt>Lê (ro)</dt><dd><code>/data</code> umbrella (todos os <code>/data/&lt;svc&gt;/</code>)</dd>
             <dt>Escreve em</dt><dd>R2 <code>homed-backups</code></dd>
           </dl>
         </article>
@@ -1825,13 +1829,11 @@
     </div>
     <div class="boxes">
       <div class="box">
-        <div class="marker">infra</div>
         <div class="name">h-cloudflared <span class="ver">2026.5.2</span></div>
         <div class="role">Daemon do tunnel — 4 conexões QUIC para edge de Madrid.</div>
         <div class="pins">config_src: local · ingress: *.iedora.com</div>
       </div>
       <div class="box">
-        <div class="marker">infra</div>
         <div class="name">h-proxy · caddy <span class="ver">cdp</span></div>
         <div class="role">Reverse proxy por labels Docker. Forward-auth snippet (authelia) reutilizado.</div>
         <div class="pins">net: edge · auto_https off · X-Forwarded-Proto https</div>
@@ -1900,44 +1902,38 @@
     <div class="layer-meta">
       <div class="layer-num">camada 03</div>
       <div class="layer-name">Apps<br/><i>media · *arr</i></div>
-      <div class="layer-blurb">Tudo atrás de Authelia, sem portas no host. Cada stack vive em <i>stacks/&lt;categoria&gt;/&lt;nome&gt;/</i>.</div>
+      <div class="layer-blurb">Tudo atrás de Authelia, sem portas no host. Layout flat — cada serviço vive em <i>compose/stacks/&lt;svc&gt;/</i> (sem categorias).</div>
       <div class="layer-tools">
         <span>navidrome</span><span>qbittorrent</span><span>prowlarr</span><span>lidarr</span><span>yt-dlp</span>
       </div>
     </div>
     <div class="boxes">
       <div class="box">
-        <div class="marker">media</div>
         <div class="name">h-navidrome</div>
         <div class="role">Stream da biblioteca de música.</div>
         <div class="pins">musica.iedora.com · /rest/* bypass</div>
       </div>
       <div class="box">
-        <div class="marker">arr</div>
         <div class="name">h-prowlarr</div>
         <div class="role">Aggregator de indexers para as Arr.</div>
         <div class="pins">prowlarr.iedora.com</div>
       </div>
       <div class="box">
-        <div class="marker">arr</div>
         <div class="name">h-lidarr</div>
         <div class="role">Biblioteca musical — automação de releases.</div>
         <div class="pins">lidarr.iedora.com</div>
       </div>
       <div class="box">
-        <div class="marker">arr</div>
         <div class="name">h-qbittorrent</div>
         <div class="role">Cliente torrent — fonte de downloads para as Arr.</div>
         <div class="pins">qb.iedora.com</div>
       </div>
       <div class="box">
-        <div class="marker">ops</div>
         <div class="name">h-yt-dlp</div>
         <div class="role">Sync diário de playlists para a biblioteca de música.</div>
         <div class="pins">cron daily 04:00 → push → h-gatus</div>
       </div>
       <div class="box">
-        <div class="marker">ops</div>
         <div class="name">h-whoami · h-glances · h-dashboard</div>
         <div class="role">Backends de teste + observabilidade leve + entrada visual.</div>
         <div class="pins">home.iedora.com · whoami.iedora.com</div>
@@ -2021,7 +2017,7 @@
       <div class="box">
         <div class="marker">iac</div>
         <div class="name">tofu/</div>
-        <div class="role">8 ficheiros. State encriptado in-place (PBKDF2 + AES-GCM).</div>
+        <div class="role">7 ficheiros. State encriptado in-place (PBKDF2 + AES-GCM). CLI wrapper em <code>scripts/tofu-wrapper.sh</code> (POSIX sh, cross-OS).</div>
         <div class="pins">dns · tunnel · r2 · providers · encryption</div>
       </div>
       <div class="box wide">
@@ -2065,13 +2061,14 @@
       </ul>
     </div>
     <div>
-      <h4>Stacks</h4>
+      <h4>Stacks (flat)</h4>
       <ul>
-        <li>infra (4)</li>
-        <li>network (1)</li>
-        <li>media (1)</li>
-        <li>arr (3)</li>
-        <li>ops (5)</li>
+        <li>ingress · auth (4)</li>
+        <li>dns (1)</li>
+        <li>data · postgres (2)</li>
+        <li>media · *arr (5)</li>
+        <li>gitops · forge (2)</li>
+        <li>ops · backup · monitor (4)</li>
       </ul>
     </div>
   </section>

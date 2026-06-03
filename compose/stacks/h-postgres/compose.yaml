@@ -1,0 +1,23 @@
+# h-postgres — Postgres partilhado para apps SaaS (forgejo, metamenu, imopush, futuras).
+#
+# Trade-off honesto (decidido):
+#   - Upgrade major (17→18) afecta todas as apps em simultâneo.
+#   - Connection pool partilhado; statement_timeout por role mitiga blast radius.
+#   - Restore granular requer extrair DB do dump.
+#
+# Apps conectam-se via network "internal" → host "h-postgres", port 5432.
+# Sem porta exposta no host.
+#
+# Fragments:
+#   runtime.yaml — h-postgres server (long-running)
+#   backups.yaml — h-postgres-dump (pg_dumpall, daily 01:00) → /data/postgres-dumps/
+
+include:
+  - runtime.yaml
+  - backups.yaml
+
+volumes:
+  h-postgres-data:
+
+networks:
+  internal: { external: true }

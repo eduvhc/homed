@@ -1,0 +1,40 @@
+# h-forgejo runtime — server long-running.
+# Config em ./config/app.ini (single source of truth). Env: só TZ + PASSWD (env_file).
+# Auth dual: HTTPS via Caddy/CF tunnel, SSH host:222 → container:2222.
+
+services:
+  h-forgejo:
+    image: codeberg.org/forgejo/forgejo:15-rootless
+    container_name: h-forgejo
+    restart: unless-stopped
+    security_opt: [ no-new-privileges:true ]
+    depends_on:
+      forgejo-db-bootstrap: { condition: service_completed_successfully }
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    env_file:
+      - ../../../secrets/h-forgejo.env       # FORGEJO__database__PASSWD
+    environment:
+      TZ: Europe/Lisbon
+    ports:
+      - "222:2222"
+    volumes:
+      - h-forgejo-data:/var/lib/gitea
+      - ./config/app.ini:/etc/gitea/app.ini:ro
+    networks: [internal, edge]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+    labels:
+      caddy: http://forge.iedora.com
+      caddy.reverse_proxy: "{{upstreams 3000}}"
+      caddy.request_body.max_size: "5GB"
+      caddy.encode: "zstd gzip"
+
+networks:
+  internal: { external: true }
+  edge:     { external: true }

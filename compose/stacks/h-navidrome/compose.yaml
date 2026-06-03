@@ -1,0 +1,53 @@
+services:
+  # ─── one-shot: chown do volume ao UID do Navidrome (idempotente) ───
+  # Named volumes são criados pelo Docker como root:root. O Navidrome corre
+  # como 1000:1000 (best-practice no-root) e precisa de write em /data.
+  h-navidrome-perms:
+    image: alpine:3.20
+    container_name: h-navidrome-perms
+    restart: "no"
+    volumes:
+      - h-navidrome-data:/data
+    entrypoint: ["sh", "-c", "chown 1000:1000 /data && echo '✓ /data owner=1000:1000'"]
+
+  h-navidrome:
+    image: deluan/navidrome:0.61.2
+    container_name: h-navidrome
+    restart: unless-stopped
+    depends_on:
+      h-navidrome-perms: { condition: service_completed_successfully }
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    security_opt: [ no-new-privileges:true ]
+    user: "1000:1000"
+    environment:
+      ND_LOGLEVEL: info
+      ND_SCANSCHEDULE: "1h"
+      ND_SESSIONTIMEOUT: 24h
+      ND_BASEURL: ""                       # servido na root do host
+      ND_ENABLEINSIGHTSCOLLECTOR: "false"
+
+      # ExtAuth: aceitar header Remote-User do forward-auth da Authelia.
+      # TrustedSources: ranges das networks Docker onde Caddy pode estar.
+      # Em prod (Beelink) os ranges são os atribuídos pelo Docker daemon — ajustar se restrito.
+      ND_EXTAUTH_TRUSTEDSOURCES: "172.16.0.0/12,192.168.0.0/16,10.0.0.0/8"
+      ND_EXTAUTH_USERHEADER: "Remote-User"
+      ND_EXTAUTH_LOGOUTURL: "https://auth.iedora.com/logout"
+    volumes:
+      - h-navidrome-data:/data                # named volume — Docker chown ao UID 1000
+      - ../../../data/media/music:/music:ro   # biblioteca partilhada (Lidarr escreve, Navidrome lê)
+    networks:
+      - edge
+    labels:
+      # Em prod (CF Tunnel termina TLS): caddy: musica.iedora.com
+      caddy: http://musica.iedora.com
+      caddy.import: authelia
+      caddy.reverse_proxy: "{{upstreams 4533}}"
+
+volumes:
+  h-navidrome-data:
+
+networks:
+  edge:
+    external: true

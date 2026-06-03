@@ -1,0 +1,32 @@
+# h-postgres runtime — server long-running.
+# Apps fazem bootstrap do seu role+DB via init container próprio
+# (ver stacks/<app>/init.yaml usando h-bootstrap-db).
+
+services:
+  h-postgres:
+    image: postgres:17-alpine
+    container_name: h-postgres
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    security_opt: [ no-new-privileges:true ]
+    env_file:
+      - ../../../secrets/h-postgres.env
+    environment:
+      TZ: Europe/Lisbon
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    volumes:
+      - h-postgres-data:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+networks:
+  internal: { external: true }

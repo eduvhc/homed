@@ -1,0 +1,16 @@
+# h-restic — engine de backup. Snapshota o que outros serviços preparam
+# (e.g., h-postgres/backups.yaml escreve dumps em /data/postgres-dumps/,
+# o restic snapshota essa pasta junto com /secrets, /data/media, etc.).
+#
+# Em OrbStack/dev: RESTIC_REPOSITORY=/repo (volume local h-restic-repo).
+# Em prod (Beelink): swap em secrets/h-restic.env para R2 endpoint.
+
+include:
+  - runtime.yaml
+
+volumes:
+  h-restic-repo:    # dev/OrbStack only (prod: R2)
+  h-valkey-data:    # external (mesmo project, partilhada com h-valkey)
+
+networks:
+  internal: { external: true }   # para chegar a h-gatus:8080 (gatus está em edge+internal)

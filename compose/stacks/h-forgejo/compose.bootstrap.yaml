@@ -1,0 +1,31 @@
+# h-forgejo bootstrap — one-shot opt-in (profile=bootstrap).
+# Step "config": importa repo + cria PAT + regista webhook → /shared/.
+# Image reusada da init.yaml (forgejo-bootstrap:2.0.0, build via forgejo-admin-bootstrap).
+
+services:
+  forgejo-config-bootstrap:
+    image: forgejo-bootstrap:2.0.0
+    container_name: forgejo-config-bootstrap
+    profiles: [bootstrap]
+    restart: "no"
+    depends_on:
+      forgejo-admin-bootstrap: { condition: service_completed_successfully }
+    env_file:
+      - ../../../secrets/h-forgejo.env
+    environment:
+      BOOTSTRAP_STEP: config
+      FORGEJO_URL: http://h-forgejo:3000
+      REPO_OWNER: edu
+      REPO_NAME: homed
+      WEBHOOK_URL: https://deploy.iedora.com/v1/webhook
+      TOKEN_NAME: h-doco-cd
+      UPSTREAM_REPO: https://github.com/eduvhc/homed.git
+    volumes:
+      - h-forgejo-creds:/shared
+    networks: [internal]
+
+volumes:
+  h-forgejo-creds:        # partilhado com h-doco-cd
+
+networks:
+  internal: { external: true }

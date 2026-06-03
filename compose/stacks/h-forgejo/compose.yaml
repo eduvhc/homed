@@ -1,0 +1,19 @@
+# h-forgejo — git hosting + CI Actions + OCI registry.
+# Forgejo 15-rootless (LTS até 2027-07-15). SSH server Go embebido (porta 222).
+# DB: Postgres em h-postgres (DB+role "forgejo", via init.yaml::forgejo-db-bootstrap).
+#
+# Entry-point fragment (decisão: compose-standard rule 1+4):
+#   runtime.yaml             — h-forgejo (long-running)
+#   init.yaml                — db + admin + OIDC source bootstraps (idempotente)
+#   compose.bootstrap.yaml   — opt-in PAT/webhook (profile=bootstrap, decisão 20)
+
+include:
+  - runtime.yaml
+  - init.yaml
+
+volumes:
+  h-forgejo-data:
+
+networks:
+  internal: { external: true }
+  edge:     { external: true }

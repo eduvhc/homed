@@ -1,0 +1,28 @@
+services:
+  h-cloudflared:
+    image: cloudflare/cloudflared:2026.5.2
+    container_name: h-cloudflared
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    security_opt: [ no-new-privileges:true ]
+    # Sem publish de portas: ligação é outbound-only (TLS para edge CF).
+    user: "65532:65532"
+    env_file:
+      - ../../../secrets/h-cloudflared.env       # TUNNEL_TOKEN gerado pelo Tofu apply
+    command: tunnel --no-autoupdate --metrics 127.0.0.1:2000 --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./config/config.yml:/etc/cloudflared/config.yml:ro
+    networks:
+      - edge                                         # para chegar a h-proxy:80
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:2000/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+networks:
+  edge:
+    external: true

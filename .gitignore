@@ -19,24 +19,24 @@ tofu/crash.log
 
 # Estado runtime das apps (vive em backup Restic, NÃO no git).
 # Configs declarativos ficam versionados — listamos só o state.
-compose/stacks/arr/h-qbittorrent/config/
-compose/stacks/arr/h-lidarr/config/
-compose/stacks/arr/h-prowlarr/config/
-compose/stacks/arr/h-sonarr/config/
-compose/stacks/arr/h-radarr/config/
-compose/stacks/media/navidrome/config/
-compose/stacks/network/h-adguard/config/work/
-compose/stacks/ops/h-yt-dlp/state/
-compose/stacks/ops/h-yt-dlp/downloads/
+compose/stacks/h-qbittorrent/config/
+compose/stacks/h-lidarr/config/
+compose/stacks/h-prowlarr/config/
+compose/stacks/h-sonarr/config/
+compose/stacks/h-radarr/config/
+compose/stacks/h-navidrome/config/
+compose/stacks/h-adguard/config/work/
+compose/stacks/h-yt-dlp/state/
+compose/stacks/h-yt-dlp/downloads/
 
 # Authelia runtime: OIDC keypair (gerada on first run), session db, notification queue
-compose/stacks/infra/h-auth/config/oidc-issuer.pem
-compose/stacks/infra/h-auth/config/oidc-issuer.public.pem
-compose/stacks/infra/h-auth/config/db.sqlite3
-compose/stacks/infra/h-auth/config/notification.txt
+compose/stacks/h-auth/config/oidc-issuer.pem
+compose/stacks/h-auth/config/oidc-issuer.public.pem
+compose/stacks/h-auth/config/db.sqlite3
+compose/stacks/h-auth/config/notification.txt
 
 # Homepage runtime logs
-compose/stacks/ops/h-dashboard/config/logs/
+compose/stacks/h-dashboard/config/logs/
 
 # Media e downloads partilhados (vivem em backup Restic, não no git)
 data/

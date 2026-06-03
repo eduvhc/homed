@@ -1,0 +1,57 @@
+# h-doco-cd — GitOps agent. Webhook → clone → SOPS decrypt → compose up.
+# Secrets: PAT + webhook (h-forgejo-creds volume), SOPS_AGE_KEY (Docker secret).
+# profile=bootstrap evita o agente matar-se ao aplicar o stack runtime.
+# Endpoint: https://deploy.iedora.com/v1/webhook (HMAC auth, sem Authelia).
+
+services:
+  h-doco-cd:
+    image: ghcr.io/kimdre/doco-cd:0.90.0
+    container_name: h-doco-cd
+    restart: unless-stopped
+    security_opt: [ no-new-privileges:true ]
+    cap_drop: [ALL]
+    profiles: [bootstrap]
+    depends_on:
+      forgejo-config-bootstrap: { condition: service_completed_successfully }
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+    environment:
+      TZ: Europe/Lisbon
+      HTTP_PORT: "9000"
+      LOG_LEVEL: info
+      AUTH_TYPE: oauth2
+      DEPLOY_CONFIG_BASE_DIR: /
+      MAX_CONCURRENT_DEPLOYMENTS: "1"
+      DOCKER_SWARM_FEATURES: "false"
+      GIT_ACCESS_TOKEN_FILE: /shared/git_access_token
+      WEBHOOK_SECRET_FILE:   /shared/webhook_secret
+      SOPS_AGE_KEY_FILE:     /run/secrets/sops_age_key
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - h-doco-cd-data:/data
+      - h-forgejo-creds:/shared:ro
+    secrets:
+      - sops_age_key
+    networks: [edge, internal]
+    labels:
+      caddy: http://deploy.iedora.com
+      caddy.reverse_proxy: "{{upstreams 9000}}"
+    healthcheck:
+      test: ["CMD", "/doco-cd", "healthcheck"]
+      start_period: 15s
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+secrets:
+  sops_age_key:
+    file: ${HOME}/.config/sops/age/keys.txt    # pré-req da máquina (~/.config/sops/age/keys.txt)
+
+volumes:
+  h-doco-cd-data:
+  h-forgejo-creds:    # external, merge com h-forgejo stack
+
+networks:
+  edge:     { external: true }
+  internal: { external: true }
