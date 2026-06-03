@@ -22,7 +22,7 @@ services:
       ND_EXTAUTH_USERHEADER: "Remote-User"
       ND_EXTAUTH_LOGOUTURL: "https://auth.iedora.com/logout"
     volumes:
-      - ./data:/data                          # estado privado do Navidrome (DB, cache)
+      - h-navidrome-data:/data                # named volume — Docker chown ao UID 1000
       - ../../../../data/media/music:/music:ro   # biblioteca partilhada (Lidarr escreve, Navidrome lê)
     networks:
       - edge
@@ -31,6 +31,9 @@ services:
       caddy: http://musica.iedora.com
       caddy.import: authelia
       caddy.reverse_proxy: "{{upstreams 4533}}"
+
+volumes:
+  h-navidrome-data:
 
 networks:
   edge:
