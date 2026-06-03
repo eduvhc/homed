@@ -19,8 +19,10 @@ set -eu
 : "${UPSTREAM_REPO:?UPSTREAM_REPO obrigatório (ex.: https://github.com/eduvhc/homed.git)}"
 
 SHARED=/shared
-mkdir -p "$SHARED"
-chmod 700 "$SHARED"
+# Volume é criado pelo Docker com perms ok para o UID do container; não tentar
+# chmod (falha "Operation not permitted" porque /shared não é ownership desta
+# user em volumes partilhados com outras stacks). Só ficheiros individuais.
+mkdir -p "$SHARED" 2>/dev/null || true
 
 auth() { printf '%s' "-u${FORGEJO_ADMIN_USERNAME}:${FORGEJO_ADMIN_PASSWORD}"; }
 api()  { curl -fsS $(auth) -H 'Content-Type: application/json' "$@"; }
