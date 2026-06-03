@@ -1,0 +1,169 @@
+{
+  // Renovate config — source-verified contra 7 homelab repos (juftin/homelab é
+  // o mais directo: Compose puro). Padrões idiomáticos 2026:
+  //   - mise native manager (Renovate 38+)
+  //   - docker-compose manager (manager pattern alargado p/ fragments do homed)
+  //   - terraform manager extended para .tofu (vehagn pattern)
+  //   - helpers:pinGitHubActionDigestsToSemver — bumpa SHA E comentário # vX.Y.Z
+  //   - Schedule overnight Europe/Lisbon (sleeps while user sleeps)
+  //   - Auto-merge patch/minor (stable, non-0.x); major requer review manual
+  //
+  // Refs: docs.renovatebot.com + home-operations/renovate-presets#1.3.1
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+
+  extends: [
+    'config:recommended',
+    'docker:enableMajor',
+    'docker:pinDigests',
+    'helpers:pinGitHubActionDigestsToSemver',
+    ':dependencyDashboard',
+    ':disableRateLimiting',
+    ':semanticCommits',
+    ':rebaseStalePrs',
+  ],
+
+  timezone: 'Europe/Lisbon',
+  schedule: ['* 0-5 * * *'],
+
+  prConcurrentLimit: 5,
+  prHourlyLimit: 2,
+
+  dependencyDashboardTitle: 'Renovate Dashboard',
+
+  // Nunca tocar em sops payloads ou age key files.
+  ignorePaths: [
+    '**/secrets/**',
+    '**/*.sops.*',
+    '**/.config/sops/**',
+  ],
+
+  // OpenTofu lives in tofu/. terraform manager por default só pega `.tf`.
+  terraform: {
+    managerFilePatterns: [
+      '/\\.tf$/',
+      '/\\.tofu$/',
+    ],
+  },
+
+  // homed stacks têm fragments além de compose.yaml — runtime.yaml,
+  // backups.yaml, compose.bootstrap.yaml. Alarga o matcher.
+  'docker-compose': {
+    managerFilePatterns: [
+      '/^compose/.+\\.ya?ml$/',
+    ],
+  },
+
+  // Annotações inline em shell/yaml para deps fora dos managers nativos:
+  //   # renovate: datasource=github-releases depName=foo/bar
+  //   FOO_VERSION = "1.2.3"
+  customManagers: [
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/\\.ya?ml$/',
+        '/\\.sh$/',
+        '/Taskfile\\.ya?ml$/',
+        '/Dockerfile$/',
+      ],
+      matchStrings: [
+        'datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)( versioning=(?<versioning>\\S+))?\\s+.*?[:=]\\s*[\"\']?(?<currentValue>[\\w+\\.\\-]+)[\"\']?',
+      ],
+      datasourceTemplate: '{{#if datasource}}{{{datasource}}}{{else}}github-releases{{/if}}',
+      versioningTemplate: '{{#if versioning}}{{{versioning}}}{{else}}semver{{/if}}',
+    },
+  ],
+
+  packageRules: [
+    // ────────────────────────── Auto-merge ──────────────────────────
+    {
+      description: 'Auto-merge patch+minor (stable, non-0.x)',
+      matchUpdateTypes: ['minor', 'patch'],
+      matchCurrentVersion: '!/^0/',
+      automerge: true,
+      automergeType: 'branch',
+    },
+    {
+      description: 'Auto-merge patch on 0.x (minor pode breaking)',
+      matchUpdateTypes: ['patch'],
+      matchCurrentVersion: '/^0\\./',
+      automerge: true,
+      automergeType: 'branch',
+    },
+    {
+      description: 'Auto-merge mise tool minor+patch',
+      matchManagers: ['mise'],
+      matchUpdateTypes: ['minor', 'patch'],
+      automerge: true,
+      automergeType: 'branch',
+      ignoreTests: false,
+    },
+    {
+      description: 'Auto-merge trusted GitHub Actions (3-day cooldown)',
+      matchManagers: ['github-actions'],
+      matchPackageNames: [
+        '/^actions\\//',
+        '/^jdx\\//',
+        '/^gitleaks\\//',
+        '/^renovatebot\\//',
+      ],
+      matchUpdateTypes: ['minor', 'patch', 'digest'],
+      automerge: true,
+      automergeType: 'branch',
+      minimumReleaseAge: '3 days',
+    },
+    {
+      description: 'Auto-merge container digest bumps',
+      matchDatasources: ['docker'],
+      matchUpdateTypes: ['digest'],
+      automerge: true,
+      automergeType: 'branch',
+    },
+
+    // ────────────────────────── Major manual ────────────────────────
+    {
+      description: 'Major bumps requerem revisão manual (dashboard)',
+      matchUpdateTypes: ['major'],
+      automerge: false,
+      addLabels: ['type/major'],
+    },
+
+    // ───────────────────── Excluir builds locais ────────────────────
+    {
+      description: 'Local custom builds (forgejo-bootstrap, h-yt-dlp, h-restic, h-bootstrap-db)',
+      matchPackageNames: [
+        'forgejo-bootstrap',
+        '/^homed/.+/', // homed/h-yt-dlp, homed/h-restic
+        'h-bootstrap-db',
+      ],
+      enabled: false,
+    },
+
+    // ───────────────────────── Versioning ───────────────────────────
+    {
+      description: 'Forgejo tags 15.x.x-rootless — loose versioning',
+      matchDatasources: ['docker'],
+      matchPackageNames: ['codeberg.org/forgejo/forgejo'],
+      versioning: 'loose',
+    },
+
+    // ───────────────────── Grouping + labels ────────────────────────
+    {
+      matchManagers: ['github-actions'],
+      groupName: 'github-actions',
+      addLabels: ['renovate/github-action'],
+    },
+    {
+      matchManagers: ['terraform'],
+      groupName: 'tofu-providers',
+      addLabels: ['renovate/tofu'],
+    },
+    {
+      matchManagers: ['mise'],
+      addLabels: ['renovate/mise'],
+    },
+    {
+      matchManagers: ['docker-compose'],
+      addLabels: ['renovate/container'],
+    },
+  ],
+}
