@@ -1,0 +1,26 @@
+{
+  "skill_name": "modular-compose",
+  "evals": [
+    {
+      "id": 1,
+      "name": "audit-bloated-compose",
+      "prompt": "I have a docker-compose.yml that's 280 lines for my self-hosted Nextcloud + Postgres + Redis + Collabora stack. It works but feels gross. Should I split it up? How? I don't want to over-engineer.",
+      "expected_output": "Specific refactor plan: assess ≥80L cap, propose flat stacks/<svc>/ layout with fragments, name the exact files to create (compose.yaml entry + runtime.yaml, init.yaml if needed), warn about cross-file anchors, mention root compose.yaml using include. Should NOT propose categories like ops/ or infra/.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "new-service-with-init",
+      "prompt": "Adding Outline (the wiki) to my existing compose homelab. It needs a postgres DB created beforehand (the postgres container is already running and shared), and an admin user seeded after first start. How should I structure this?",
+      "expected_output": "Should propose: stacks/h-outline/ directory; compose.yaml (entry) + runtime.yaml + init.yaml (or simpler if fits in 80L); init.yaml has 2 idempotent services: db-bootstrap (using h-bootstrap-db:semver pattern, NOT EXISTS guards) + admin-bootstrap (idempotent CLI check before create). Mentions service_completed_successfully and avoiding inline shell >10L. Bonus: mentions source-verification (read Outline docs/code for admin CLI).",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "shell-in-compose-refactor",
+      "prompt": "My compose has an init container that runs about 25 lines of shell to bootstrap an Authelia OIDC keypair, register a Forgejo OAuth source, and create an admin user. The block scalar `command: |` is getting unwieldy. What's the right pattern?",
+      "expected_output": "Should explicitly recommend: extract to custom image with multiplex dispatcher (BOOTSTRAP_STEP env var) + steps/ subdir; ≤10L inline cap; cite the rule that block scalar command + entrypoint list causes argv leak; mention semver-pinned image tag (no :latest); NOT recommend mounting host scripts; mention reading the upstream Authelia/Forgejo source for the right CLI flags.",
+      "files": []
+    }
+  ]
+}
