@@ -1,0 +1,13 @@
+# gitleaks config — allowlist dos sops-encrypted files (não são leaks reais).
+# Default rules ficam activos para tudo o resto.
+# Schema: https://github.com/gitleaks/gitleaks/blob/master/README.md#configuration
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "sops-encrypted dotenv files — payload base64 pode matchar false-positives"
+paths = [
+    '''secrets/.*\.env''',
+    '''tofu/terraform\.tfstate.*''', # encrypted state (PBKDF2/AES-GCM) — encryption headers podem matchar
+]

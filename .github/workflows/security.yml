@@ -1,0 +1,35 @@
+# Security gate: gitleaks scan p/ secret patterns em todo o repo (não só secrets/).
+# Apanha leaks fora do scope do SOPS check (ex.: API keys hardcoded em compose,
+# tokens em comments, .env.bak esquecidos).
+#
+# Allowlist: secrets/*.env (sops payload tem chunks base64 que podem matchar
+# false-positives das rules de gitleaks).
+
+name: security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    name: gitleaks (secret pattern scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        with:
+          fetch-depth: 0 # gitleaks varre git history (não só HEAD)
+
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Sem licença Pro — public repo é gratuito.
+          GITLEAKS_NOTIFY_USER_LIST: '@eduvhc'

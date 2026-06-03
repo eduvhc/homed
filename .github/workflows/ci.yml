@@ -1,0 +1,91 @@
+# CI gate: validate compose + Taskfile + tofu + ansible em cada PR e push para main.
+# Replica os checks do lefthook (que pode ser bypassed com --no-verify) + adiciona
+# tofu fmt/validate e ansible syntax que não estão no lefthook.
+#
+# Actions pinadas por SHA (consensus 2026) — versão em comentário p/ Renovate parsear.
+# Refs: vehagn/homelab, jlengelbrecht/prox-ops, github.com/jdx/mise-action
+
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: validate (compose + Taskfile + SOPS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+
+      - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          cache: true
+
+      # SOPS check ANTES de stub. Garante que cada secrets/*.env committado
+      # tem payload sops encriptado. Mesma logic do lefthook.yml.
+      - name: SOPS encryption check (secrets/*.env)
+        run: |
+          fail=0
+          for f in secrets/*.env; do
+            if ! grep -qE 'sops[:_]' "$f"; then
+              echo "::error file=$f::not encrypted — run 'task secrets:lock' before commit"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      # Stub env files para `compose config -q` parsar sem decrypt keys.
+      # SOPS check já foi feito acima — agora podemos esvaziar os files (idempotente
+      # no working tree do runner; não toca em git).
+      - name: Stub encrypted env files (compose parse)
+        run: |
+          for f in secrets/*.env; do : > "$f"; done
+
+      # task validate = task --list-all (parse de root + módulos) + compose config -q
+      - name: task validate
+        run: task validate
+
+  tofu:
+    name: tofu (fmt + validate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+
+      - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          cache: true
+
+      - name: tofu fmt
+        run: tofu -chdir=tofu fmt -recursive -check -diff
+
+      # init -backend=false: só descarrega providers, ignora backend config.
+      # Sem credenciais R2/CF necessárias.
+      - name: tofu init (providers only)
+        run: tofu -chdir=tofu init -backend=false
+
+      - name: tofu validate
+        run: tofu -chdir=tofu validate
+
+  ansible:
+    name: ansible (syntax-check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+
+      # ansible-core 2.16.x já pré-instalado em ubuntu-24.04 runners. Sem mise needed.
+      # --syntax-check valida YAML + estrutura do play (não imports/collections).
+      - name: ansible-playbook --syntax-check
+        run: ansible-playbook --syntax-check -i ansible/inventory.yml ansible/provision.yml
