@@ -44,6 +44,7 @@ export HOMED_BWS_PROJECT_ID=<project-uuid>
 
 # 2. Clone + tools pinned
 git clone <repo-url> ~/homed && cd ~/homed
+mise trust                             # 1ª vez (segurança nativa do mise)
 mise install                           # sops, age, task, opentofu, bws, jq (~30s)
 
 # 3. ansible: instalar separado (não é pin do .mise.toml)

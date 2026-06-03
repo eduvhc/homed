@@ -100,6 +100,13 @@
         create: true
         mode: '0644'
 
+    # mise trust é obrigatório por design — sem isto qualquer comando mise
+    # falha com "Config files are not trusted". Idempotente (trust é per-path).
+    - name: mise · trust ~/homed/.mise.toml
+      ansible.builtin.command:
+        cmd: "{{ ansible_env.HOME }}/.local/bin/mise trust {{ ansible_env.HOME }}/homed/.mise.toml"
+      changed_when: false
+
     - name: mise · install tools pinned em ~/homed/.mise.toml
       ansible.builtin.command:
         cmd: "{{ ansible_env.HOME }}/.local/bin/mise install"
