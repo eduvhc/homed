@@ -31,7 +31,26 @@ Todos os serviços homelab são prefixados com `h-` (container, service-name
 e folder). Ex: `h-auth`, `h-adguard`, `h-navidrome`. Identifica
 imediatamente o que pertence ao stack na lista de containers.
 
-## Bring-up numa máquina nova (runbook)
+## Quick start (single command, fresh server)
+
+```bash
+ssh user@server
+git clone https://github.com/eduvhc/homed && cd homed
+./bootstrap.sh
+# [prompt] cola conteúdo do age key + Ctrl-D
+# [prompt] sudo password
+# → stack up em ~5min
+```
+
+`bootstrap.sh` é idempotente. Para CI/automação sem prompts:
+```bash
+HOMED_AGE_KEY="$(cat ~/keys.txt)" ANSIBLE_BECOME_PASS="$pw" ./bootstrap.sh
+```
+
+Detalhe do que faz: distro check → mise install → ansible install (apt) →
+age key (env|bws|prompt) → `task provision HOST=localhost` → `task up PROFILE=bootstrap`.
+
+## Bring-up via operator push (alternativa)
 
 Cross-OS (macOS, Linux, Windows WSL2). Zero ficheiros pré-existentes —
 credenciais saem de **Bitwarden Secrets Manager** via `bws`; versões das
