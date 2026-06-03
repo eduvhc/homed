@@ -25,7 +25,9 @@ services:
       caddy.import: authelia
       caddy.reverse_proxy: "{{upstreams 80}}"
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/control/status"]
+      # /login.html é public resource (200, sem auth) — source: adguardhome
+      # internal/home/authhttp.go:307 ("/login.*" em isPublicResource).
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/login.html"]
       interval: 30s
       timeout: 5s
       retries: 3
