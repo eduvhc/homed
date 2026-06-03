@@ -23,12 +23,9 @@ services:
       # SEM caddy.import: authelia — Gatus tem OIDC nativo (security/oidc.go).
       # Login: redirect a auth.iedora.com → callback /authorization-code/callback.
       caddy.reverse_proxy: "{{upstreams 8080}}"
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+    # gatus image é scratch (binary only) — sem shell/wget/curl para healthcheck.
+    # `docker compose ps` mostra "running" via container state nativo. Gatus
+    # auto-monitora o seu próprio /health via push de alerts (TBD).
 
 volumes:
   h-gatus-data:
