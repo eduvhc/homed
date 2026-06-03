@@ -42,7 +42,7 @@ else
       --arg url "$UPSTREAM_REPO" \
       --arg owner "$REPO_OWNER" \
       --arg name "$REPO_NAME" \
-      '{clone_addr:$url, repo_owner:$owner, repo_name:$name, mirror:false, private:false, description:"homelab declarativo · imported from upstream"}')" \
+      '{clone_addr:$url, repo_owner:$owner, repo_name:$name, mirror:true, mirror_interval:"10m", private:false, description:"homelab declarativo · mirror of upstream"}')" \
     >/dev/null
   echo "✓ repo importado de $UPSTREAM_REPO"
 fi
