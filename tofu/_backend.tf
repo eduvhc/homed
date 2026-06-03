@@ -18,8 +18,14 @@ terraform {
 
     use_lockfile = true # nativo R2 (If-None-Match) — sem DynamoDB
 
+    # R2 path-style addressing (canónico — CF official docs).
+    # Virtual-hosted-style flaks contra R2 subdomains em SDK v2.
+    use_path_style = true
+
     # R2 não tem AWS-style credential validation / region / account verification
+    # nem EC2 instance metadata endpoint (skip_metadata_api_check para non-AWS hosts).
     skip_credentials_validation = true
+    skip_metadata_api_check     = true
     skip_region_validation      = true
     skip_requesting_account_id  = true
     skip_s3_checksum            = true # R2 checksum differs do AWS S3
