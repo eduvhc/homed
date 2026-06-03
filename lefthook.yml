@@ -1,0 +1,26 @@
+# Pre-commit hooks via lefthook (https://lefthook.dev/).
+# Operator install: `mise install` (pin abaixo) + `lefthook install`.
+# Roda task validate + bloqueia commit de secrets em plaintext.
+
+pre-commit:
+  parallel: true
+  commands:
+    task-validate:
+      run: task validate
+      # Não passa staged files — corre a validação full do repo (parse +
+      # compose config -q). Idempotente, ~1s.
+
+    secrets-encrypted:
+      glob: "secrets/*.env"
+      # Bloqueia commit se algum secrets/*.env staged está em plaintext.
+      # sops-encrypted files começam com `<key>=ENC[AES256_GCM,data:...` ou
+      # têm `sops_` keys; plaintext não.
+      run: |
+        fail=0
+        for f in {staged_files}; do
+          if ! grep -qE 'sops[:_]' "$f"; then
+            echo "✗ $f está em plaintext — corre 'task secrets:lock' antes de commit" >&2
+            fail=1
+          fi
+        done
+        exit $fail

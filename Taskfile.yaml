@@ -30,6 +30,8 @@ tasks:
     desc: |
       Arranca o stack. PROFILE=bootstrap na 1ª boot ou re-seed.
       Auto: secrets:decrypt + builds custom + docker networks idempotentes.
+      --wait sempre com timeout (bootstrap 600s, normal 120s) para que
+      healthchecks surfaceiem em vez de "ficou silenciosamente unhealthy".
     deps:
       - secrets:decrypt
       - build:forgejo-bootstrap
@@ -39,9 +41,11 @@ tasks:
     cmds:
       - for: ['edge', 'internal', 'dns']
         cmd: docker network inspect {{.ITEM}} >/dev/null 2>&1 || docker network create {{.ITEM}}
-      - COMPOSE_PROFILES={{.PROFILE | default ""}} {{.COMPOSE}} up -d {{.WAIT_FLAG}}
+      - COMPOSE_PROFILES={{.PROFILE | default ""}} {{.COMPOSE}} up -d --wait --wait-timeout {{.WAIT_TIMEOUT}}
     vars:
-      WAIT_FLAG: '{{if .PROFILE}}--wait{{end}}'
+      # Bootstrap puxa imagens + corre inits (forgejo db + admin + OIDC) — pode demorar.
+      # Day-to-day é só restart, 2 min é generoso. Default Docker é 0 = infinito (issue #10269).
+      WAIT_TIMEOUT: '{{if .PROFILE}}600{{else}}120{{end}}'
 
   down:
     desc: Pára o stack (decryptos ficam no disco)
@@ -57,14 +61,24 @@ tasks:
     cmd: '{{.COMPOSE}} logs -f --tail=100 {{.NAME}}'
 
   validate:
-    desc: Valida a árvore de composes (sem subir nada)
+    desc: Valida Taskfile (parse) + árvore de composes (config -q). Pre-commit.
     silent: true
-    cmd: '{{.COMPOSE}} --profile bootstrap config -q'
+    cmds:
+      - task --list-all >/dev/null
+      - '{{.COMPOSE}} --profile bootstrap config -q'
 
   # ─────────────────────────────  bootstrap  ─────────────────────────────────
   provision:
-    desc: 'Bootstrap declarativo da máquina (uso: task provision HOST=beelink)'
-    cmd: ansible-playbook -i ansible/inventory.yml -l {{.HOST | default "localhost"}} ansible/provision.yml --ask-become-pass
+    desc: |
+      Bootstrap declarativo da máquina (uso: task provision HOST=beelink).
+      Se ANSIBLE_BECOME_PASS está exportado, usa não-interactivo (CI-friendly).
+      Caso contrário, --ask-become-pass prompta o sudo password no terminal.
+    cmd: |
+      if [ -n "${ANSIBLE_BECOME_PASS:-}" ]; then
+        ansible-playbook -i ansible/inventory.yml -l {{.HOST | default "localhost"}} ansible/provision.yml -e ansible_become_pass="$ANSIBLE_BECOME_PASS"
+      else
+        ansible-playbook -i ansible/inventory.yml -l {{.HOST | default "localhost"}} ansible/provision.yml --ask-become-pass
+      fi
 
   # ───────────────────────────────  db  ──────────────────────────────────────
   migrate:

@@ -1,16 +1,49 @@
 version: '3'
 
 # SRP: OpenTofu via bws-injected secrets (zero plaintext em disco).
-# CMD passthrough para qualquer subcommand tofu; sync-secrets distinct
-# porque é tofu output → sops -e pipe.
 #
+# Verbos seguros: tofu:plan, tofu:apply (passthrough útil para init/output/destroy).
 # Pré-req: bws + BWS_ACCESS_TOKEN + HOMED_BWS_PROJECT_ID.
 # bws inject: CLOUDFLARE_API_TOKEN + HOMED_TOFU_ENCRYPTION como env vars.
+#
+# Segurança: `task tofu CMD=...` é passthrough literal sem shell-escape de Go
+# templates (https://taskfile.dev/reference/templating). CMD com `;`/`&&` é
+# executável. Aceitável porque é local operator op (não vem de input externo).
+# Para automação CI: usar verbos explícitos (tofu:plan, tofu:apply), nunca o
+# passthrough com input dinâmico.
 
 tasks:
+  # ─── verbos seguros (uso diário) ───
+  plan:
+    desc: 'Tofu plan (read-only — diff entre state e código)'
+    cmds: [{ task: _run, vars: { TF_CMD: 'plan' } }]
+
+  apply:
+    desc: 'Tofu apply -auto-approve (state encriptado, vars bws-injected)'
+    cmds: [{ task: _run, vars: { TF_CMD: 'apply -auto-approve' } }]
+
+  # ─── passthrough para subcommands raros (init, output, destroy, taint, etc.) ───
   default:
-    desc: 'Tofu via bws (uso: task tofu CMD=plan / CMD=apply / CMD=init)'
+    desc: 'Tofu CMD passthrough (uso: task tofu CMD=init / CMD="output -raw X")'
     requires: { vars: [CMD] }
+    cmds: [{ task: _run, vars: { TF_CMD: '{{.CMD}}' } }]
+
+  # ─── pipeline: output → secret encriptado ───
+  sync-secrets:
+    desc: Tunnel_token → secrets/h-cloudflared.env (encriptado, zero plaintext em disco)
+    cmd: |
+      tmp=$(mktemp) && trap 'rm -f "$tmp"' EXIT
+      # tofu output emite ZERO chatter — só o valor. tail -1 para limpar
+      # qualquer warning eventual sem engolir erros (não usar 2>/dev/null).
+      TOKEN=$(task tofu:_run TF_CMD='output -raw tunnel_token' | tail -1)
+      [ -n "$TOKEN" ] || { echo "✗ tunnel_token vazio — tofu output falhou" >&2; exit 1; }
+      echo "TUNNEL_TOKEN=$TOKEN" > "$tmp"
+      sops -e --input-type dotenv --output-type dotenv "$tmp" > secrets/h-cloudflared.env
+
+  # ─── internal: bws-wrapped tofu runner. Não usar directo. ───
+  _run:
+    internal: true
+    requires: { vars: [TF_CMD] }
     preconditions:
       - sh: command -v bws
         msg: "bws CLI não instalado — https://bitwarden.com/help/secrets-manager-cli/"
@@ -31,14 +64,5 @@ tasks:
           "https://api.cloudflare.com/client/v4/zones?name=iedora.com" | jq -r ".result[0].id")
         export TF_VAR_cf_account_id TF_VAR_cf_zone_id
         export TF_VAR_encryption_passphrase="$HOMED_TOFU_ENCRYPTION"
-        cd tofu && tofu {{.CMD}}
+        cd tofu && tofu {{.TF_CMD}}
       '
-
-  sync-secrets:
-    desc: Tunnel_token → secrets/h-cloudflared.env (encriptado, zero plaintext em disco)
-    cmd: |
-      tmp=$(mktemp)
-      trap 'rm -f "$tmp"' EXIT
-      TOKEN=$(task tofu CMD='output -raw tunnel_token' 2>/dev/null | tail -1)
-      echo "TUNNEL_TOKEN=$TOKEN" > "$tmp"
-      sops -e --input-type dotenv --output-type dotenv "$tmp" > secrets/h-cloudflared.env

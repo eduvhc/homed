@@ -43,10 +43,11 @@ curl -fsSL https://mise.run | sh
 export BWS_ACCESS_TOKEN=<machine-account-token>
 export HOMED_BWS_PROJECT_ID=<project-uuid>
 
-# 2. Clone + tools pinned
+# 2. Clone + tools pinned + pre-commit hooks
 git clone <repo-url> ~/homed && cd ~/homed
 mise trust                             # 1ª vez (segurança nativa do mise)
-mise install                           # sops, age, task, opentofu, bws, jq (~30s)
+mise install                           # sops, age, task, opentofu, bws, jq, lefthook (~30s)
+lefthook install                       # activa pre-commit: task validate + secrets-encrypted check
 
 # 3. ansible: instalar separado (não é pin do .mise.toml)
 #    macOS via nix-darwin já tem. WSL2/Linux: pipx install ansible
@@ -145,12 +146,14 @@ file-scoped, shell ≤10 linhas) em
 ## Tofu (Cloudflare + R2)
 
 ```bash
-task tofu CMD=init                     # inicializa providers
-task tofu CMD=plan                     # plan
-task tofu CMD=apply                    # apply (state encriptado)
+task tofu CMD=init                     # passthrough (1ª vez — descarrega providers)
+task tofu:plan                         # verbo safe (read-only diff)
+task tofu:apply                        # verbo safe (apply -auto-approve, state encriptado)
 task tofu:sync-secrets                 # output tunnel_token → secrets/h-cloudflared.env encriptado
 ```
 
+Verbos `tofu:plan|apply` evitam o passthrough `CMD=` (Go templates não
+escapam args; `CMD=apply` plain prompta interactive — falha em CI).
 State encriptado com `HOMED_TOFU_ENCRYPTION` lido do Bitwarden Secrets
 Manager (logic em `.taskfiles/tofu.yaml`).
 
