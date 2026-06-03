@@ -38,10 +38,11 @@ services:
       - ../../../../secrets/h-auth.env     # decifrado por `task up` (sops -> plaintext, 600)
     environment:
       TZ: Europe/Lisbon
-      # Activa template engine: a config usa {{ secret "/config/oidc-issuer.pem" }}
-      # para carregar a RSA key sem a deixar plaintext no YAML.
-      # Source: internal/configuration/koanf_provider_filtered_file.go:140
-      X_AUTHELIA_CONFIG_FILTERS: template
+      # Activa os 2 filtros de config (Authelia aplica-os por ordem):
+      #   expand-env: substitui ${VAR} via os.Expand — usado para VALKEY_PASSWORD
+      #   template:   executa {{ secret "..." }} — carrega o oidc-issuer.pem
+      # Source: internal/configuration/{koanf_provider_filtered_file.go,const.go}
+      X_AUTHELIA_CONFIG_FILTERS: expand-env,template
     volumes:
       - ./config:/config
     # Sem host port: h-auth é o gateway de auth, não precisa de acesso direto.
