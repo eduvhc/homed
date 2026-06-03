@@ -1,8 +1,35 @@
 services:
+  # ─── one-shot: gera oidc-issuer.pem RSA keypair (idempotente) ───
+  # Authelia precisa de RSA key para assinar tokens OIDC. Cada máquina
+  # gera a sua na primeira corrida — clients OIDC re-handshake quando
+  # o JWKS muda. Substitui o antigo SCP secrets/keys/oidc-issuer.pem.
+  h-auth-key-bootstrap:
+    image: authelia/authelia:4.39.20
+    container_name: h-auth-key-bootstrap
+    restart: "no"
+    volumes:
+      - ./config:/config
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        if [ -s /config/oidc-issuer.pem ]; then
+          echo "skip: /config/oidc-issuer.pem já existe"
+        else
+          authelia crypto pair rsa generate \
+            --directory /config \
+            --file.private-key oidc-issuer.pem \
+            --file.public-key oidc-issuer.public.pem
+          echo "✓ oidc-issuer keypair gerado"
+        fi
+
   h-auth:
     image: authelia/authelia:4.39.20
     container_name: h-auth
     restart: unless-stopped
+    depends_on:
+      h-auth-key-bootstrap: { condition: service_completed_successfully }
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
@@ -17,9 +44,6 @@ services:
       X_AUTHELIA_CONFIG_FILTERS: template
     volumes:
       - ./config:/config
-      # OIDC issuer RSA key — lida via template `{{ secret ... }}`.
-      # NÃO :ro porque o rootless container faz chown na startup.
-      - ../../../../secrets/keys/oidc-issuer.pem:/config/oidc-issuer.pem
     # Sem host port: h-auth é o gateway de auth, não precisa de acesso direto.
     # Acesso normal via auth.iedora.com → Caddy → h-auth (Caddy routing por Host header).
     # Para testes locais: `curl -H "Host: auth.iedora.com" http://localhost:18080/...`
