@@ -49,21 +49,30 @@ Cria no dashboard:
    task encrypt NAME=h-restic
    ```
 
-## Setup inicial (macOS dev)
+## Setup inicial (macOS / Linux / Windows — cross-OS)
 
-Zero ficheiros de credenciais. Tudo vem do **macOS Keychain** + **CF API**:
+Zero ficheiros de credenciais. Tudo vem do **Bitwarden Secrets Manager** + **CF API**:
 
 ```bash
-# Pré-requisito: ter o token CF no keychain (uma vez)
-security add-generic-password -s CLOUDFLARE_API_TOKEN -a $(whoami) -w '<seu-token>'
+# 1. Instalar bws CLI (uma vez, qualquer OS)
+#    https://github.com/bitwarden/sdk-sm/releases  (bws-v2.1.0+)
+#    Extrair o binário 'bws' para algures no PATH.
 
-# Que permissões o token precisa:
+# 2. Criar secrets no projecto Bitwarden Secrets Manager:
+#    - CLOUDFLARE_API_TOKEN   (gerado em CF dashboard, ver permissões abaixo)
+#    - HOMED_TOFU_ENCRYPTION  (passphrase aleatória 32+ bytes — gera com `openssl rand -hex 32`)
+
+# Que permissões o CF token precisa:
 #   - Account → R2 Storage → Edit
 #   - Zone → DNS → Edit
 #   - Account → Cloudflare Tunnel → Edit
-#   - User → User Details → Read (para descobrir account_id automaticamente)
+#   - User → User Details → Read
 
-# Operação
+# 3. Exportar credenciais bws no shell (qualquer OS):
+export BWS_ACCESS_TOKEN=<machine-account-token>
+export HOMED_BWS_PROJECT_ID=<project-uuid>
+
+# 4. Operação
 task tofu-init                # primeira vez (descarrega providers)
 task tofu-plan                # mostra mudanças propostas
 task tofu-apply               # aplica

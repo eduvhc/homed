@@ -12,7 +12,7 @@ ui:
 
 security:
   # OIDC nativo via Authelia (substituiu basic auth + forward-auth).
-  # Source: security/oidc.go (struct OIDCConfig em /Users/eduvhc/projects/references/gatus)
+  # Source: github.com/TwiN/gatus → security/oidc.go (struct OIDCConfig)
   # Endpoints públicos preservados: /health, /api/v1/endpoints/*/external (push deadman).
   oidc:
     issuer-url: 'https://auth.iedora.com'

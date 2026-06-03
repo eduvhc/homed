@@ -60,7 +60,7 @@ Substituir `<app>` pelo nome (lowercase, sem hífens; é também o nome do role 
          DBMATE_NO_DUMP_SCHEMA: "true"
        volumes:
          # host path da pasta de migrations da app (monorepo, repo dedicado, etc.)
-         - /Users/eduvhc/code/<repo>/<path>/db/migrations:/db/migrations:ro
+         - ${MIGRATIONS_HOST_PATH}:/db/migrations:ro   # exportado pelo operador (cross-OS)
        command: ["up"]
        networks: [internal]
 

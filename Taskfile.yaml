@@ -161,36 +161,33 @@ tasks:
       - "{{.COMPOSE}} exec h-restic-backup restic stats --mode raw-data"
 
   _tofu:
-    desc: 'Internal — tofu wrapper. Lê CLOUDFLARE_API_TOKEN do macOS Keychain, descobre account_id e zone_id via CF API, gere passphrase de state encryption no Keychain.'
+    desc: |
+      Internal — tofu wrapper cross-OS. Lê CLOUDFLARE_API_TOKEN e
+      HOMED_TOFU_ENCRYPTION via Bitwarden Secrets Manager (bws CLI).
+      Pré-req no operador (uma vez por máquina): bws instalado + env vars
+      BWS_ACCESS_TOKEN e HOMED_BWS_PROJECT_ID exportadas.
     requires: { vars: [CMD] }
     cmds:
       - |
         set -eu
+        command -v bws >/dev/null 2>&1 \
+          || { echo "✗ bws CLI não instalado. https://bitwarden.com/help/secrets-manager-cli/"; exit 1; }
+        command -v jq  >/dev/null 2>&1 \
+          || { echo "✗ jq não instalado. (apt install jq | brew install jq | winget install stedolan.jq)"; exit 1; }
+        : "${BWS_ACCESS_TOKEN:?export BWS_ACCESS_TOKEN=<machine-account-token>}"
+        : "${HOMED_BWS_PROJECT_ID:?export HOMED_BWS_PROJECT_ID=<project-uuid>}"
 
-        # 1. Token CF — do keychain (único secret externo necessário)
-        TOKEN=$(security find-generic-password -s CLOUDFLARE_API_TOKEN -w 2>/dev/null) \
-          || { echo "✗ CLOUDFLARE_API_TOKEN não está no keychain. Adiciona com:"; \
-               echo "    security add-generic-password -s CLOUDFLARE_API_TOKEN -a $(whoami) -w '<token>'"; exit 1; }
-        export TF_VAR_cf_api_token="$TOKEN"
-
-        # 2. Account ID + Zone ID — descobertos via CF API (cache-friendly)
-        export TF_VAR_cf_account_id=$(curl -sf -H "Authorization: Bearer $TOKEN" \
-          https://api.cloudflare.com/client/v4/accounts \
-          | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"][0]["id"])')
-        export TF_VAR_cf_zone_id=$(curl -sf -H "Authorization: Bearer $TOKEN" \
-          'https://api.cloudflare.com/client/v4/zones?name=iedora.com' \
-          | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"][0]["id"])')
-
-        # 3. Passphrase para state encryption — guarda no keychain (gera 1x)
-        PASS=$(security find-generic-password -s HOMED_TOFU_ENCRYPTION -w 2>/dev/null || echo "")
-        if [ -z "$PASS" ]; then
-          PASS=$(openssl rand -hex 32)
-          security add-generic-password -s HOMED_TOFU_ENCRYPTION -a $(whoami) -w "$PASS"
-          echo "→ Nova passphrase de state encryption guardada em keychain (HOMED_TOFU_ENCRYPTION)"
-        fi
-        export TF_VAR_encryption_passphrase="$PASS"
-
-        cd tofu && tofu {{.CMD}}
+        bws run --project-id "$HOMED_BWS_PROJECT_ID" -- '
+          : "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN não está no projecto bws}"
+          : "${HOMED_TOFU_ENCRYPTION:?HOMED_TOFU_ENCRYPTION não está no projecto bws}"
+          export TF_VAR_cf_api_token="$CLOUDFLARE_API_TOKEN"
+          export TF_VAR_cf_account_id=$(curl -sfH "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            https://api.cloudflare.com/client/v4/accounts | jq -r ".result[0].id")
+          export TF_VAR_cf_zone_id=$(curl -sfH "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/zones?name=iedora.com" | jq -r ".result[0].id")
+          export TF_VAR_encryption_passphrase="$HOMED_TOFU_ENCRYPTION"
+          cd tofu && tofu {{.CMD}}
+        '
 
   tofu-init:
     desc: 'Inicializa providers do Tofu'
