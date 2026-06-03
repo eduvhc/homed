@@ -38,19 +38,27 @@ proibido. Sintomas:
 - "Vamos lá tentar isto" sem source-citation
 - Esperança como mecanismo de validação ("deve funcionar")
 
-Quando aparece um bug, ANTES de tocar em código:
+**Antes de QUALQUER fix (não só bugs — qualquer mudança), pesquisar:**
 
-1. **Lê o source code do upstream** — `~/projects/references/<svc>/` ou `git clone`
-   se não existir. Cita ficheiro:linha que justifica a causa-raiz.
-2. **Verifica com WebFetch** quando source não é suficiente (docs canónicas).
-3. **Propõe UMA solução vetted** — explicita o que vai ser feito + porquê +
+1. **Service reference (source code do upstream)** — `~/projects/references/<svc>/`
+   ou `git clone` se não existir. Cita ficheiro:linha que justifica o fix.
+2. **Web** via WebFetch/WebSearch — docs oficiais, changelogs, issues GitHub.
+   Patterns/answers de blogs ficam stale em ~3 meses; trata como pista, não verdade.
+3. **Compara**: se source e web divergem, source ganha (web pode estar outdated).
+
+Memória, intuição, "lembro-me que era assim" — **NÃO são fontes**. Verifica
+sempre antes de tocar em código.
+
+**Sequência obrigatória**:
+
+1. Pesquisa (1) + (2) acima → cita evidência.
+2. **Propõe UMA solução vetted** — explicita o que vai ser feito + porquê +
    citação ao source. Se há ambiguidade entre 2 caminhos, escolhe baseado em
    evidência, não preferência.
-4. **Só então edita.**
+3. **Só então edita.**
 
-A excepção: bugs triviais sem ambiguidade (typo, path errado óbvio, env var
-que falta documentada upstream). Marca explicitamente como "trivial — sem
-source-check" no commit.
+A excepção: typos óbvios sem ambiguidade (path errado typo, missing newline).
+Marca explicitamente como "trivial — sem source-check" no commit.
 
 Se durante a investigação se descobre que a abordagem inicial estava errada,
 **reverte e recomeça**. Não acumular hot-fixes em cima do erro original. Esse
