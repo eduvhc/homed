@@ -16,12 +16,9 @@ services:
       - ./config/config.yml:/etc/cloudflared/config.yml:ro
     networks:
       - edge                                         # para chegar a h-proxy:80
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:2000/ready || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+    # cloudflared image é scratch (binary only) — sem shell/wget para healthcheck.
+    # Tunnel restart-on-failure cobre a maior parte dos casos. Para observability
+    # ativa, gatus pode probar tunnel-edge (auth.iedora.com/api/health) externally.
 
 networks:
   edge:
